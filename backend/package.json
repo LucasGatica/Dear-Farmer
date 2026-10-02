@@ -1,0 +1,17 @@
+{
+  "name": "dear-farmer-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create dear-farmer",
+    "db:migrate": "wrangler d1 execute dear-farmer --remote --file=./schema.sql",
+    "db:migrate:local": "wrangler d1 execute dear-farmer --local --file=./schema.sql",
+    "test": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "Name": "Dear Farmer",
+  "Author": "Lucas Gatica",
+  "Version": "1.0.0",
+  "Description": "Escreva cartas anônimas que chegam na caixa de correio de outros jogadores, no estilo Kind Words.",
+  "UniqueID": "LucasGatica.DearFarmer",
+  "EntryDll": "DearFarmer.dll",
+  "MinimumApiVersion": "4.0.0",
+  "MinimumGameVersion": "1.6.0",
+  "UpdateKeys": []
+}

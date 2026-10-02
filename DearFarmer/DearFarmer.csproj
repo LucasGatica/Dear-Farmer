@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>DearFarmer</AssemblyName>
+    <RootNamespace>DearFarmer</RootNamespace>
+    <Version>1.0.0</Version>
+    <TargetFramework>net6.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <!-- O Harmony não é necessário: tudo é feito via eventos do SMAPI. -->
+    <EnableHarmony>false</EnableHarmony>
+    <!-- Se o SMAPI não achar o jogo sozinho, defina GamePath aqui ou via variável de ambiente. -->
+    <!-- <GamePath>C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley</GamePath> -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Referencia o jogo + SMAPI e copia o mod para a pasta Mods ao compilar. -->
+    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.4.0" />
+  </ItemGroup>
+</Project>
