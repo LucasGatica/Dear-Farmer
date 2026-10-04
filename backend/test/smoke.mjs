@@ -33,14 +33,21 @@ console.log('validação');
   r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(1) }, headers: { 'X-DearFarmer-Version': '0.9.0' } }); check('cliente velho -> 426', r.status === 426);
 }
 
+console.log('design da carta');
+{
+  let r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(900), style: 'azul' } }); check('style string -> 400 bad_style', r.status === 400 && r.data.error === 'bad_style');
+  r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(901), style: { paper: 'sky', ink: 'x'.repeat(40) } } }); check('style valor longo -> 400', r.status === 400 && r.data.error === 'bad_style');
+  r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(902), style: { paper: 'sky', ink: 'navy', layout: 'postcard', hacker: 'ignored' } } }); check('style válido -> 201', r.status === 201, r.data);
+}
+
 console.log('enviar cartas (autor A = tok(1))');
 let ids = [];
 for (let i = 1; i <= 3; i++) {
-  const r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(i), name: 'Fazendeiro A <script>', lang: 'pt-BR' } });
+  const r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(i), name: 'Fazendeiro A <script>', lang: 'pt-BR', style: i === 1 ? { paper: 'rose', ink: 'wine', layout: 'centered', border: 'hearts', stamp: 'heart', sticker: 'strawberry' } : undefined } });
   check(`carta ${i} -> 201`, r.status === 201, r.data); if (r.data?.id) ids.push(r.data.id);
 }
 { const r = await call('POST', '/v1/letters', { token: tok(1), body: { body: letter(1), lang: 'pt-BR' } }); check('duplicada -> 409', r.status === 409); }
-{ const r = await call('GET', '/v1/mine', { token: tok(1) }); check('mine lista 3', r.status === 200 && r.data.letters.length === 3, r.data); check('nome sanitizado', r.data.letters[0].name === 'Fazendeiro A script'); }
+{ const r = await call('GET', '/v1/mine', { token: tok(1) }); check('mine lista 4', r.status === 200 && r.data.letters.length === 4, r.data); check('nome sanitizado', r.data.letters[0].name === 'Fazendeiro A script'); }
 
 console.log('feed (leitor B = tok(2))');
 let fed;
@@ -48,12 +55,21 @@ let fed;
   const r = await call('POST', '/v1/feed', { token: tok(2), body: { count: 2, lang: 'pt-BR', exclude: [] } });
   check('feed 200 com 2 cartas', r.status === 200 && r.data.letters.length === 2, r.data); fed = r.data.letters;
   check('vote_token presente', fed.every((l) => typeof l.vote_token === 'string' && l.vote_token.length === 32));
+  {
+    const all = await call('POST', '/v1/feed', { token: tok(4), body: { count: 10, lang: 'pt-BR' } });
+    const styled = all.data.letters.find((l) => l.id === ids[0]);
+    check('style volta no feed', styled && styled.style && styled.style.paper === 'rose' && styled.style.sticker === 'strawberry' && !('hacker' in styled.style), styled);
+    const plain = all.data.letters.find((l) => l.id === ids[1]);
+    check('carta sem style -> null', plain && plain.style === null, plain);
+    const m = await call('GET', '/v1/mine', { token: tok(1) });
+    check('style volta em /mine', m.data.letters.find((l) => l.id === ids[0])?.style?.ink === 'wine');
+  }
   const r2 = await call('POST', '/v1/feed', { token: tok(2), body: { count: 5, lang: 'pt-BR', exclude: fed.map((l) => l.id) } });
-  check('exclude respeitado', r2.status === 200 && r2.data.letters.every((l) => !fed.some((f) => f.id === l.id)) && r2.data.letters.length === 1, r2.data);
+  check('exclude respeitado', r2.status === 200 && r2.data.letters.every((l) => !fed.some((f) => f.id === l.id)) && r2.data.letters.length === 2, r2.data);
   const r3 = await call('POST', '/v1/feed', { token: tok(1), body: { count: 5, lang: 'pt-BR' } });
   check('autor não recebe as próprias cartas', r3.status === 200 && r3.data.letters.length === 0, r3.data);
   const r4 = await call('POST', '/v1/feed', { token: tok(3), body: { count: 5, lang: 'ja' } });
-  check('idioma raro cai no fallback', r4.status === 200 && r4.data.letters.length === 3, r4.data);
+  check('idioma raro cai no fallback', r4.status === 200 && r4.data.letters.length === 4, r4.data);
 }
 
 console.log('votos');

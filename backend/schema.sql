@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS letters (
   hidden_reason TEXT,
   hidden_at     INTEGER,
   rand          REAL    NOT NULL,            -- numero aleatorio fixo p/ amostragem barata via indice
+  style         TEXT,                        -- JSON com o design escolhido pelo autor (papel, tinta, layout...)
   created_at    INTEGER NOT NULL             -- unix seconds
 );
 

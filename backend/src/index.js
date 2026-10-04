@@ -6,7 +6,7 @@
  *
  * Rotas (todas JSON, prefixo /v1):
  *   GET  /v1/health                      -> status + limites (para o mod mostrar na UI)
- *   POST /v1/letters                     -> envia uma carta           { name?, body, lang? }
+ *   POST /v1/letters                     -> envia uma carta           { name?, body, lang?, style? }
  *   POST /v1/feed                        -> pede cartas para entregar { count, exclude:[ids], lang }
  *   POST /v1/letters/:id/vote            -> vota                      { value: 1|-1|0, vote_token }
  *   POST /v1/letters/:id/report          -> denuncia                  { vote_token, reason? }
@@ -152,6 +152,7 @@ async function createLetter(request, env, auth) {
 
   const name = normalizeName(body.name, int(env.MAX_NAME_LENGTH, 24));
   const lang = normalizeLang(body.lang);
+  const style = normalizeStyle(body.style);
   const bodyHash = await sha256Hex('body:' + text.toLowerCase().replace(/\s+/g, ' '));
 
   // --- limites por jogador / IP / duplicatas (todas leituras baratas, via índice) ---
@@ -180,9 +181,9 @@ async function createLetter(request, env, auth) {
   }
 
   const res = await env.DB.prepare(
-    `INSERT INTO letters (author_id, ip_hash, name, body, body_hash, lang, rand, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(auth.authorId, auth.ipHash, name, text, bodyHash, lang, Math.random(), t).run();
+    `INSERT INTO letters (author_id, ip_hash, name, body, body_hash, lang, rand, created_at, style)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(auth.authorId, auth.ipHash, name, text, bodyHash, lang, Math.random(), t, style).run();
 
   const id = res.meta.last_row_id;
   return json({
@@ -212,7 +213,7 @@ async function feed(request, env, auth, ctx) {
   const sampleSize = Math.max(40, count * 8);
   const pivot = Math.random();
   const sql = (op, order) =>
-    `SELECT id, name, body, score, delivered, created_at, lang FROM letters
+    `SELECT id, name, body, score, delivered, created_at, lang, style FROM letters
      WHERE hidden = 0 AND lang = ? AND rand ${op} ? AND author_id != ? AND score >= ? AND created_at > ?
      ORDER BY rand ${order} LIMIT ?`;
 
@@ -233,7 +234,7 @@ async function feed(request, env, auth, ctx) {
   // Último recurso: qualquer idioma (jogador de idioma raro não fica sem cartas).
   if (rows.length < count) {
     const c = await env.DB.prepare(
-      `SELECT id, name, body, score, delivered, created_at, lang FROM letters
+      `SELECT id, name, body, score, delivered, created_at, lang, style FROM letters
        WHERE hidden = 0 AND author_id != ? AND score >= ? AND created_at > ? ORDER BY rand LIMIT ?`
     ).bind(auth.authorId, minScore, minCreated, sampleSize).all();
     take(c.results);
@@ -248,6 +249,7 @@ async function feed(request, env, auth, ctx) {
       body: r.body,
       lang: r.lang,
       created_at: r.created_at,
+      style: parseStyle(r.style),
       vote_token: await voteToken(env, r.id, auth.authorId),
     });
   }
@@ -358,10 +360,10 @@ async function vote(request, env, auth, letterId, isReport) {
 
 async function mine(env, auth) {
   const rs = await env.DB.prepare(
-    `SELECT id, name, body, lang, score, upvotes, downvotes, delivered, hidden, hidden_reason, created_at
+    `SELECT id, name, body, lang, score, upvotes, downvotes, delivered, hidden, hidden_reason, created_at, style
      FROM letters WHERE author_id = ? ORDER BY created_at DESC LIMIT 50`
   ).bind(auth.authorId).all();
-  return json({ letters: rs.results });
+  return json({ letters: rs.results.map((r) => ({ ...r, style: parseStyle(r.style) })) });
 }
 
 async function deleteOwnLetter(env, auth, letterId) {
@@ -459,6 +461,30 @@ function isLowEffort(text) {
   if (/(.)\1{9,}/u.test(text)) return true;                // "aaaaaaaaaa"
   const distinct = new Set(letters.toLowerCase()).size;
   return distinct < 4;                                     // "ababababab"
+}
+
+/**
+ * Design da carta: objeto com ids curtos (paper, ink, layout, border, stamp, sticker).
+ * O servidor só valida a forma; quais ids existem é assunto do mod (ids desconhecidos caem no padrão).
+ */
+const STYLE_KEYS = ['paper', 'ink', 'layout', 'border', 'stamp', 'sticker'];
+function normalizeStyle(style) {
+  if (style == null) return null;
+  if (typeof style !== 'object' || Array.isArray(style)) throw new HttpError(400, 'bad_style', 'style deve ser um objeto.');
+  const out = {};
+  for (const key of STYLE_KEYS) {
+    const v = style[key];
+    if (v == null) continue;
+    if (typeof v !== 'string' || !/^[a-z0-9_-]{1,24}$/.test(v)) throw new HttpError(400, 'bad_style', `style.${key} inválido.`);
+    out[key] = v;
+  }
+  const keys = Object.keys(out);
+  if (keys.length === 0) return null;
+  return JSON.stringify(out);
+}
+function parseStyle(s) {
+  if (!s) return null;
+  try { return JSON.parse(s); } catch { return null; }
 }
 
 function findBlockedWord(text, list) {

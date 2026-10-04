@@ -3,44 +3,40 @@ using DearFarmer.Framework;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using StardewValley;
-using StardewValley.BellsAndWhistles;
 using StardewValley.Menus;
 
 namespace DearFarmer.UI
 {
     /// <summary>
-    /// Base dos menus do mod: desenha o papel de carta do jogo com o visual do Dear Farmer
-    /// (papel levemente azulado, carimbo postal e cabeçalho), para o jogador saber na hora que não é correio comum.
+    /// Base dos menus que mostram um papel de carta (ler e escrever). O visual vem de um
+    /// <see cref="LetterStyle"/>: papel, tinta, layout, borda, carimbo e adesivo.
     /// </summary>
     public abstract class PaperMenu : IClickableMenu
     {
         protected readonly ModServices S;
+        protected ResolvedStyle Style;
+        protected LetterArt.Frame Frame;
 
-        protected const int PaperW = 320;
-        protected const int PaperH = 180;
-        protected float Scale = 4f;
-
-        protected static readonly Color Ink = new(64, 44, 32);
-        protected static readonly Color InkSoft = new(110, 90, 70);
-        protected static readonly Color PaperTint = new(226, 236, 244);
         protected static readonly Color Accent = new(86, 150, 150);
         protected static readonly Color Good = new(96, 160, 80);
         protected static readonly Color Bad = new(200, 80, 70);
         protected static readonly Color Warn = new(222, 150, 50);
 
-        public static readonly Rectangle StampSource = new(0, 0, 24, 28);
-        public static readonly Rectangle ThumbUpSource = new(24, 0, 16, 16);
-        public static readonly Rectangle ThumbDownSource = new(40, 0, 16, 16);
-        public static readonly Rectangle FlagSource = new(56, 0, 16, 16);
-        public static readonly Rectangle PenSource = new(72, 0, 16, 16);
-        public static readonly Rectangle EnvelopeSource = new(88, 0, 16, 16);
+        protected Rectangle Content => this.Frame.Content;
+        protected int BodyTop => this.Frame.BodyTop(this.Style);
+        protected Color Ink => this.Style.Ink;
+        protected Color InkSoft => this.Style.InkSoft;
 
-        /// <summary>Área útil do papel (dentro da borda decorada), em pixels de UI.</summary>
-        protected Rectangle Content;
-
-        protected PaperMenu(ModServices services) : base(0, 0, 0, 0, showUpperRightCloseButton: true)
+        protected PaperMenu(ModServices services, LetterStyle style) : base(0, 0, 0, 0, showUpperRightCloseButton: true)
         {
             this.S = services;
+            this.Style = LetterCatalog.Resolve(style);
+            this.Relayout();
+        }
+
+        public void SetStyle(LetterStyle style)
+        {
+            this.Style = LetterCatalog.Resolve(style);
             this.Relayout();
         }
 
@@ -48,14 +44,14 @@ namespace DearFarmer.UI
         protected virtual void Relayout()
         {
             var vp = new Rectangle(Game1.uiViewport.X, Game1.uiViewport.Y, Game1.uiViewport.Width, Game1.uiViewport.Height);
-            this.Scale = Math.Min(4f, Math.Min(vp.Width / (float)PaperW, vp.Height / (float)PaperH));
-            this.width = (int)(PaperW * this.Scale);
-            this.height = (int)(PaperH * this.Scale);
+            float scale = Math.Min(4f, Math.Min(vp.Width / (float)LetterArt.PaperW, vp.Height / (float)LetterArt.PaperH));
+            this.Frame = new LetterArt.Frame { Scale = scale };
+            this.width = this.Frame.Width;
+            this.height = this.Frame.Height;
             this.xPositionOnScreen = vp.X + (vp.Width - this.width) / 2;
             this.yPositionOnScreen = vp.Y + (vp.Height - this.height) / 2;
-
-            int margin = (int)(16 * this.Scale);
-            this.Content = new Rectangle(this.xPositionOnScreen + margin, this.yPositionOnScreen + margin, this.width - margin * 2, this.height - margin * 2);
+            this.Frame.X = this.xPositionOnScreen;
+            this.Frame.Y = this.yPositionOnScreen;
             this.initializeUpperRightCloseButton();
         }
 
@@ -67,29 +63,9 @@ namespace DearFarmer.UI
 
         protected void DrawPaper(SpriteBatch b, string headerText)
         {
-            // fundo escurecido, como o visualizador de cartas do jogo
             b.Draw(Game1.fadeToBlackRect, Game1.graphics.GraphicsDevice.Viewport.Bounds, Color.Black * 0.6f);
-
-            // papel do jogo com tom azulado
-            b.Draw(this.S.LetterTexture, new Vector2(this.xPositionOnScreen, this.yPositionOnScreen), new Rectangle(0, 0, PaperW, PaperH), PaperTint, 0f, Vector2.Zero, this.Scale, SpriteEffects.None, 0.86f);
-
-            // carimbo no canto superior direito
-            float stampScale = Math.Max(2f, this.Scale * 0.75f);
-            var stampPos = new Vector2(this.Content.Right - StampSource.Width * stampScale, this.Content.Y - 2 * this.Scale);
-            b.Draw(this.S.UiTexture, stampPos + new Vector2(2, 2), StampSource, Color.Black * 0.15f, 0f, Vector2.Zero, stampScale, SpriteEffects.None, 0.87f);
-            b.Draw(this.S.UiTexture, stampPos, StampSource, Color.White, 0f, Vector2.Zero, stampScale, SpriteEffects.None, 0.88f);
-
-            // cabeçalho com a fonte "de carta" do jogo
-            if (!string.IsNullOrEmpty(headerText))
-                SpriteText.drawString(b, headerText, this.Content.X, this.Content.Y);
-
-            // linha divisória
-            int lineY = this.Content.Y + (int)(14 * this.Scale);
-            b.Draw(Game1.staminaRect, new Rectangle(this.Content.X, lineY, this.Content.Width - (int)(StampSource.Width * stampScale) - 8, 2), Ink * 0.25f);
+            LetterArt.DrawPaper(b, this.S, this.Style, this.Frame, headerText);
         }
-
-        /// <summary>Topo da área de texto (abaixo do cabeçalho).</summary>
-        protected int BodyTop => this.Content.Y + (int)(18 * this.Scale);
 
         /// <summary>Botão com ícone e rótulo, no estilo das caixas do jogo.</summary>
         protected void DrawButton(SpriteBatch b, Rectangle bounds, Rectangle? icon, string label, Color iconTint, bool active, bool enabled, bool hovered)
@@ -100,7 +76,7 @@ namespace DearFarmer.UI
             int x = bounds.X + 12;
             if (icon.HasValue)
             {
-                float iconScale = 2f;
+                const float iconScale = 2f;
                 int iy = bounds.Y + (bounds.Height - (int)(icon.Value.Height * iconScale)) / 2;
                 b.Draw(this.S.UiTexture, new Vector2(x, iy), icon.Value, enabled ? iconTint : Color.Gray, 0f, Vector2.Zero, iconScale, SpriteEffects.None, 0.9f);
                 x += (int)(icon.Value.Width * iconScale) + 8;

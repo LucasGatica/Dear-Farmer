@@ -145,6 +145,7 @@ namespace DearFarmer
                 new Response("write", this.S.Text("mailbox.write")),
                 new Response("received", receivedLabel),
                 new Response("mine", this.S.Text("mailbox.mine")),
+                new Response("design", this.S.Text("mailbox.design")),
                 new Response("close", this.S.Text("mailbox.close")),
             };
 
@@ -160,6 +161,9 @@ namespace DearFarmer
                         break;
                     case "mine":
                         Game1.activeClickableMenu = new LetterListMenu(this.S, LetterListMenu.ListMode.Mine);
+                        break;
+                    case "design":
+                        Game1.activeClickableMenu = new LetterDesignMenu(this.S);
                         break;
                 }
             });

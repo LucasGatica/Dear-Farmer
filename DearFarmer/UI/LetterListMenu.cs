@@ -181,7 +181,7 @@ namespace DearFarmer.UI
                 }
                 else if (row.Mine != null)
                 {
-                    var letter = new Letter { Id = row.Mine.Id, Name = row.Mine.Name, Body = row.Mine.Body, CreatedAt = row.Mine.CreatedAt, Removed = row.Mine.Hidden != 0 };
+                    var letter = new Letter { Id = row.Mine.Id, Name = row.Mine.Name, Body = row.Mine.Body, CreatedAt = row.Mine.CreatedAt, Removed = row.Mine.Hidden != 0, Style = row.Mine.Style };
                     Game1.activeClickableMenu = new ReadLetterMenu(this.S, letter, canVote: false, footerInfo: row.Meta, returnTo: this);
                 }
                 return;
@@ -252,7 +252,7 @@ namespace DearFarmer.UI
 
             // título com ícone
             string title = this.Mode == ListMode.Received ? this.S.Text("list.received.title") : this.S.Text("list.mine.title");
-            b.Draw(this.S.UiTexture, new Vector2(this.xPositionOnScreen + Margin, this.yPositionOnScreen + 40), PaperMenu.EnvelopeSource, Color.White, 0f, Vector2.Zero, 3f, SpriteEffects.None, 0.9f);
+            b.Draw(this.S.UiTexture, new Vector2(this.xPositionOnScreen + Margin, this.yPositionOnScreen + 40), LetterArt.EnvelopeSource, Color.White, 0f, Vector2.Zero, 3f, SpriteEffects.None, 0.9f);
             Utility.drawTextWithShadow(b, title, Game1.dialogueFont, new Vector2(this.xPositionOnScreen + Margin + 60, this.yPositionOnScreen + 44), Game1.textColor);
 
             Rectangle area = this.ListArea;
@@ -263,11 +263,20 @@ namespace DearFarmer.UI
                 IClickableMenu.drawTextureBox(b, Game1.menuTexture, new Rectangle(0, 256, 60, 60), row.Bounds.X, row.Bounds.Y, row.Bounds.Width, row.Bounds.Height, hover ? Color.Wheat : Color.White, 1f, false);
 
                 int textW = row.Bounds.Width - 32 - (row.DeleteBounds != Rectangle.Empty ? 120 : 0);
-                b.DrawString(Game1.smallFont, TextUtil.Truncate(row.Title, 60), new Vector2(row.Bounds.X + 16, row.Bounds.Y + 10), Game1.textColor);
+
+                // amostra do design da carta (papel + carimbo em miniatura)
+                ResolvedStyle st = LetterCatalog.Resolve(row.Letter?.Style ?? row.Mine?.Style);
+                var swatch = new Rectangle(row.Bounds.X + 16, row.Bounds.Y + 12, 20, 26);
+                b.Draw(Game1.staminaRect, new Rectangle(swatch.X - 2, swatch.Y - 2, swatch.Width + 4, swatch.Height + 4), Game1.textColor * 0.6f);
+                b.Draw(this.S.LetterTexture, swatch, new Rectangle(0, 0, LetterArt.PaperW, LetterArt.PaperH), st.PaperTint);
+                b.Draw(this.S.UiTexture, new Vector2(swatch.X + 4, swatch.Y + 5), LetterArt.Stamp(st.StampIndex), Color.White, 0f, Vector2.Zero, 0.5f, SpriteEffects.None, 0.9f);
+
+                b.DrawString(Game1.smallFont, TextUtil.Truncate(row.Title, 60), new Vector2(row.Bounds.X + 48, row.Bounds.Y + 10), Game1.textColor);
                 string snippet = row.Snippet;
+                textW -= 32;
                 while (snippet.Length > 4 && Game1.smallFont.MeasureString(snippet).X > textW) snippet = TextUtil.Truncate(snippet, snippet.Length - 4);
-                b.DrawString(Game1.smallFont, snippet, new Vector2(row.Bounds.X + 16, row.Bounds.Y + 38), Game1.textColor * 0.85f);
-                b.DrawString(Game1.smallFont, row.Meta, new Vector2(row.Bounds.X + 16, row.Bounds.Y + 66), row.MetaColor);
+                b.DrawString(Game1.smallFont, snippet, new Vector2(row.Bounds.X + 48, row.Bounds.Y + 38), Game1.textColor * 0.85f);
+                b.DrawString(Game1.smallFont, row.Meta, new Vector2(row.Bounds.X + 48, row.Bounds.Y + 66), row.MetaColor);
 
                 if (row.DeleteBounds != Rectangle.Empty)
                 {

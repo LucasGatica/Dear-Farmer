@@ -27,6 +27,8 @@ namespace DearFarmer.UI
         public int MaxLength = 600;
         public string Placeholder = "";
         public int Padding = 12;
+        /// <summary>Centraliza as linhas (layout "centered").</summary>
+        public bool Centered;
         public Action OnTextChanged;
 
         private struct Line { public int Start; public int End; public string Text; }
@@ -269,7 +271,7 @@ namespace DearFarmer.UI
             int lineIdx = this.ScrollLine + (y - this.Bounds.Y - this.Padding) / this.LineHeight;
             lineIdx = Math.Max(0, Math.Min(lineIdx, this.Lines.Count - 1));
             Line line = this.Lines[lineIdx];
-            this.Caret = line.Start + this.ColumnAt(line, x - this.Bounds.X - this.Padding);
+            this.Caret = line.Start + this.ColumnAt(line, x - this.LineX(line));
         }
 
         public void ReceiveScrollWheel(int direction)
@@ -277,6 +279,14 @@ namespace DearFarmer.UI
             this.EnsureLayout();
             this.ScrollLine += direction > 0 ? -1 : 1;
             this.ScrollLine = Math.Max(0, Math.Min(this.ScrollLine, Math.Max(0, this.Lines.Count - this.VisibleLines)));
+        }
+
+        /// <summary>X inicial de uma linha (muda com o alinhamento).</summary>
+        private float LineX(Line line)
+        {
+            float x = this.Bounds.X + this.Padding;
+            if (!this.Centered) return x;
+            return x + (this.InnerWidth - this.Font.MeasureString(line.Text ?? "").X) / 2;
         }
 
         // ------------------------------------------------------------------
@@ -298,7 +308,8 @@ namespace DearFarmer.UI
             {
                 foreach (string pl in TextUtil.Wrap(this.Placeholder, this.Font, this.InnerWidth))
                 {
-                    b.DrawString(this.Font, pl, new Vector2(x, y), this.PlaceholderColor);
+                    float px = this.Centered ? x + (this.InnerWidth - this.Font.MeasureString(pl).X) / 2 : x;
+                    b.DrawString(this.Font, pl, new Vector2(px, y), this.PlaceholderColor);
                     y += this.LineHeight;
                 }
                 return;
@@ -310,11 +321,12 @@ namespace DearFarmer.UI
             for (int i = this.ScrollLine; i < this.Lines.Count && i < this.ScrollLine + this.VisibleLines; i++)
             {
                 Line line = this.Lines[i];
-                b.DrawString(this.Font, line.Text, new Vector2(x, y), this.TextColor);
+                float lx = this.LineX(line);
+                b.DrawString(this.Font, line.Text, new Vector2(lx, y), this.TextColor);
                 if (showCaret && i == caretLine)
                 {
                     float cx = this.Font.MeasureString(line.Text.Substring(0, Math.Max(0, Math.Min(line.Text.Length, this.Caret - line.Start)))).X;
-                    b.Draw(Game1.staminaRect, new Rectangle((int)(x + cx), y + 2, 2, this.LineHeight - 4), this.TextColor);
+                    b.Draw(Game1.staminaRect, new Rectangle((int)(lx + cx), y + 2, 2, this.LineHeight - 4), this.TextColor);
                 }
                 y += this.LineHeight;
             }

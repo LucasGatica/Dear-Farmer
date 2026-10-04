@@ -38,9 +38,9 @@ namespace DearFarmer.Framework
             }
         }
 
-        public Task<ApiResult<SendResponse>> SendLetterAsync(string body, string name, string lang, CancellationToken ct = default)
+        public Task<ApiResult<SendResponse>> SendLetterAsync(string body, string name, string lang, LetterStyle style, CancellationToken ct = default)
         {
-            return this.CallAsync<SendResponse>(HttpMethod.Post, "/v1/letters", new { body, name, lang }, ct);
+            return this.CallAsync<SendResponse>(HttpMethod.Post, "/v1/letters", new { body, name, lang, style }, ct);
         }
 
         public Task<ApiResult<FeedResponse>> FeedAsync(int count, IEnumerable<long> exclude, string lang, CancellationToken ct = default)

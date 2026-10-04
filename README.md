@@ -32,6 +32,26 @@ Com o Worker, um jogador gera por volta de 1 requisição a cada 5 dias de jogo 
 5. **Votar**: cada carta entregue vem com um `vote_token` assinado (HMAC) pelo servidor. Só quem recebeu a carta consegue votar nela, e cada jogador tem um voto por carta (pode trocar ou remover).
 6. **Moderação automática**: `score <= -5` ou `3 denúncias` → a carta é removida e o texto apagado do banco. O autor vê "removida" na lista "Cartas que escrevi" e pode apagar as próprias cartas quando quiser.
 
+### Design das cartas
+
+Quem escreve escolhe o visual da carta, e quem recebe vê exatamente esse visual. O editor fica em **caixa de correio → "Personalizar minhas cartas"** ou no botão **Design** da tela de escrever, com preview ao vivo:
+
+| Opção | Valores |
+|---|---|
+| Tema (atalho que configura tudo) | Clássico, Oceano, Floresta, Doce, Noite, Vintage, Fazenda, Junimo |
+| Papel | Creme, Céu, Rosa, Menta, Lavanda, Sol, Kraft, Pergaminho, Ardósia, Noite |
+| Tinta | Marrom, Preta, Azul-marinho, Verde, Vinho, Ameixa, Petróleo, Branca |
+| Layout | Clássico (cabeçalho à esquerda), Centralizado (texto e assinatura centrados), Postal (faixa colorida no topo), Minimalista (sem cabeçalho, carimbo embaixo) |
+| Borda | Nenhuma, Pontos, Traços, Corações, Estrelas, Ondas, Folhas |
+| Carimbo | Coração, Estrela, Sol, Folha, Lua, Flor |
+| Adesivo | Nenhum, Flor, Estrela, Coração, Nuvem, Morango, Junimo, Galinha, Cogumelo |
+
+Há também um botão **Aleatório** (sempre com tinta legível para o papel sorteado) e **Padrão**. O design é salvo por instalação e vale para todas as cartas seguintes.
+
+Como funciona por baixo: a carta leva um objeto `style` com ids curtos (`{"paper":"rose","ink":"wine","layout":"centered",...}`). O servidor só valida o formato (chaves conhecidas, valores `[a-z0-9_-]{1,24}`) e devolve o objeto no feed; **quem resolve os ids é o mod**, e ids desconhecidos caem no padrão. Isso significa que dá para adicionar papéis, carimbos e adesivos novos só no mod, sem mexer no servidor, e um jogador com versão antiga nunca quebra ao receber um design que não conhece. Tinta branca em papel claro (ou escura em papel escuro) é corrigida automaticamente para manter a carta legível.
+
+Para adicionar um design novo: edite `LetterCatalog` em `DearFarmer/Framework/LetterStyle.cs` (cores e listas), desenhe o sprite em `tools/make-ui-png.mjs` e rode `node tools/make-ui-png.mjs`; depois acrescente o nome em `i18n/*.json` (`design.<campo>.<id>`).
+
 ### Anti-abuso (em camadas)
 
 | Camada | Regra | Onde |
@@ -82,6 +102,8 @@ npx wrangler secret put SIGNING_SECRET      # cole algo longo e aleatório (ex.:
 npx wrangler secret put ADMIN_KEY           # opcional, para os endpoints /admin
 npx wrangler deploy                         # imprime a URL: https://dear-farmer.<sua-conta>.workers.dev
 ```
+
+Se o banco foi criado antes do design de cartas, aplique a migração: `npx wrangler d1 execute dear-farmer --remote --file=./migrations/0002_style.sql`.
 
 Teste: `curl https://dear-farmer.<sua-conta>.workers.dev/v1/health`.
 
@@ -134,8 +156,8 @@ Todas as rotas em `/v1` exigem `Authorization: Bearer <token>` e aceitam/retorna
 | Rota | Corpo | Resposta |
 |---|---|---|
 | `GET /v1/health` | — | limites e versão mínima do cliente |
-| `POST /v1/letters` | `{ body, name?, lang? }` | `{ id, remaining_hour, remaining_day }` |
-| `POST /v1/feed` | `{ count, exclude: [ids], lang }` | `{ letters: [{ id, name, body, lang, created_at, vote_token }] }` |
+| `POST /v1/letters` | `{ body, name?, lang?, style? }` | `{ id, remaining_hour, remaining_day }` |
+| `POST /v1/feed` | `{ count, exclude: [ids], lang }` | `{ letters: [{ id, name, body, lang, created_at, style, vote_token }] }` |
 | `POST /v1/letters/:id/vote` | `{ value: 1 \| -1 \| 0, vote_token }` | `{ score, upvotes, downvotes, removed }` |
 | `POST /v1/letters/:id/report` | `{ vote_token, reason? }` | idem |
 | `GET /v1/mine` | — | suas cartas com votos e status |

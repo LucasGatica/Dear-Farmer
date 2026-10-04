@@ -24,6 +24,9 @@ namespace DearFarmer.Framework
         /// <summary>Rascunho não enviado (sobrevive a fechar o menu / o jogo).</summary>
         public string Draft { get; set; }
 
+        /// <summary>Design atual das cartas que este jogador escreve.</summary>
+        public LetterStyle Style { get; set; } = new();
+
         /// <summary>Última tentativa de buscar cartas (UTC), para não martelar um servidor fora do ar.</summary>
         public DateTime LastFetchAttemptUtc { get; set; }
         public bool LastFetchFailed { get; set; }
@@ -79,6 +82,7 @@ namespace DearFarmer.Framework
             this.State.Queue ??= new List<Letter>();
             this.State.SeenIds ??= new List<long>();
             this.State.Players ??= new Dictionary<string, PlayerState>();
+            this.State.Style ??= new LetterStyle();
 
             if (string.IsNullOrWhiteSpace(this.State.Token))
             {

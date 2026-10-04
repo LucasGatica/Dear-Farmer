@@ -10,7 +10,7 @@ using StardewValley.Menus;
 
 namespace DearFarmer.UI
 {
-    /// <summary>Visualizador de uma carta do Dear Farmer, com botões de gostei / não gostei / denunciar.</summary>
+    /// <summary>Visualizador de uma carta do Dear Farmer, com o design escolhido por quem escreveu e botões de voto.</summary>
     public sealed class ReadLetterMenu : PaperMenu
     {
         private readonly Letter Letter;
@@ -22,6 +22,8 @@ namespace DearFarmer.UI
         private int LinesPerPage = 1;
         private int Page;
         private int PageCount = 1;
+        private int FooterTop;
+        private Rectangle BodyArea;
 
         private readonly ClickableComponent UpButton = new(Rectangle.Empty, "up") { myID = 100, rightNeighborID = 101 };
         private readonly ClickableComponent DownButton = new(Rectangle.Empty, "down") { myID = 101, leftNeighborID = 100, rightNeighborID = 102 };
@@ -30,21 +32,21 @@ namespace DearFarmer.UI
         private readonly ClickableTextureComponent NextPage;
 
         private string Status = "";
-        private Color StatusColor = InkSoft;
+        private Color StatusColor;
         private bool Busy;
         private double ReportArmedUntil;
         private int Hovered = -1;
-        private int FooterTop;
 
-        private static readonly SpriteFont BodyFont = Game1.dialogueFont;
+        private static SpriteFont BodyFont => Game1.dialogueFont;
 
         public ReadLetterMenu(ModServices services, Letter letter, bool canVote, string footerInfo = null, IClickableMenu returnTo = null)
-            : base(services)
+            : base(services, letter.Style)
         {
             this.Letter = letter;
             this.CanVote = canVote && !letter.Removed;
             this.FooterInfo = footerInfo;
             this.ReturnTo = returnTo;
+            this.StatusColor = this.InkSoft;
 
             this.PrevPage = new ClickableTextureComponent(Rectangle.Empty, Game1.mouseCursors, new Rectangle(352, 495, 12, 11), 4f) { myID = 103, rightNeighborID = 104 };
             this.NextPage = new ClickableTextureComponent(Rectangle.Empty, Game1.mouseCursors, new Rectangle(365, 495, 12, 11), 4f) { myID = 104, leftNeighborID = 103 };
@@ -67,37 +69,38 @@ namespace DearFarmer.UI
 
         private void LayoutContent()
         {
-            int buttonH = 56;
-            int footerTop = this.Content.Bottom - buttonH - 8;
-            this.FooterTop = footerTop;
-            int bodyTop = this.BodyTop + 28; // espaço para "Recebida em ..."
-            int bodyBottom = footerTop - 48;  // espaço para a assinatura
+            const int buttonH = 56;
+            this.FooterTop = this.Content.Bottom - buttonH - 8;
+            int bodyTop = this.BodyTop + 28;          // espaço para "Recebida em ..."
+            int bodyBottom = this.FooterTop - 48;      // espaço para a assinatura
             int lineHeight = BodyFont.LineSpacing;
 
-            this.LinesPerPage = Math.Max(1, (bodyBottom - bodyTop) / lineHeight);
+            this.BodyArea = new Rectangle(this.Content.X + 8, bodyTop, this.Content.Width - 16, Math.Max(lineHeight, bodyBottom - bodyTop));
+
+            this.LinesPerPage = Math.Max(1, this.BodyArea.Height / lineHeight);
             string text = TextUtil.MakeRenderable(this.Letter.Removed ? this.S.Text("read.removed") : this.Letter.Body, BodyFont);
-            this.Lines = TextUtil.Wrap(text, BodyFont, this.Content.Width - 16);
+            this.Lines = TextUtil.Wrap(text, BodyFont, this.BodyArea.Width);
             this.PageCount = Math.Max(1, (int)Math.Ceiling(this.Lines.Count / (double)this.LinesPerPage));
             this.Page = Math.Min(this.Page, this.PageCount - 1);
 
-            // botões de voto no rodapé
             int x = this.Content.X;
             if (this.CanVote)
             {
                 int wUp = this.MeasureButton(this.S.Text("read.upvote"), true);
                 int wDown = this.MeasureButton(this.S.Text("read.downvote"), true);
                 int wRep = this.MeasureButton(this.S.Text("read.report"), true);
-                this.UpButton.bounds = new Rectangle(x, footerTop, wUp, buttonH); x += wUp + 8;
-                this.DownButton.bounds = new Rectangle(x, footerTop, wDown, buttonH); x += wDown + 8;
-                this.ReportButton.bounds = new Rectangle(x, footerTop, wRep, buttonH);
+                this.UpButton.bounds = new Rectangle(x, this.FooterTop, wUp, buttonH); x += wUp + 8;
+                this.DownButton.bounds = new Rectangle(x, this.FooterTop, wDown, buttonH); x += wDown + 8;
+                this.ReportButton.bounds = new Rectangle(x, this.FooterTop, wRep, buttonH);
             }
             else
             {
                 this.UpButton.bounds = this.DownButton.bounds = this.ReportButton.bounds = Rectangle.Empty;
             }
 
-            this.PrevPage.bounds = new Rectangle(this.Content.Right - 112, footerTop + 4, 48, 44);
-            this.NextPage.bounds = new Rectangle(this.Content.Right - 52, footerTop + 4, 48, 44);
+            int pagerRight = this.Content.Right - (this.Style.Layout == LetterLayout.Minimal ? 80 : 0);
+            this.PrevPage.bounds = new Rectangle(pagerRight - 112, this.FooterTop + 4, 48, 44);
+            this.NextPage.bounds = new Rectangle(pagerRight - 52, this.FooterTop + 4, 48, 44);
         }
 
         public override void snapToDefaultClickableComponent()
@@ -112,11 +115,7 @@ namespace DearFarmer.UI
 
         public override void receiveLeftClick(int x, int y, bool playSound = true)
         {
-            if (this.upperRightCloseButton != null && this.upperRightCloseButton.containsPoint(x, y))
-            {
-                this.Close();
-                return;
-            }
+            if (this.upperRightCloseButton != null && this.upperRightCloseButton.containsPoint(x, y)) { this.Close(); return; }
             if (this.PageCount > 1)
             {
                 if (this.PrevPage.containsPoint(x, y) && this.Page > 0) { this.Page--; Game1.playSound("shwip"); return; }
@@ -186,7 +185,7 @@ namespace DearFarmer.UI
             int previous = this.Letter.MyVote;
             this.Letter.MyVote = value;       // UI otimista
             this.S.Store.MarkDirty();
-            this.SetStatus(this.S.Text("write.sending"), InkSoft);
+            this.SetStatus(this.S.Text("write.sending"), this.InkSoft);
             this.Busy = true;
             Game1.playSound("smallSelect");
 
@@ -194,7 +193,7 @@ namespace DearFarmer.UI
             Task.Run(async () =>
             {
                 ApiResult<VoteResponse> result = await this.S.Api.VoteAsync(letter.Id, value, letter.VoteToken);
-                this.S.RunOnMainThread(() => this.OnVoteResult(result, previous, value));
+                this.S.RunOnMainThread(() => this.OnVoteResult(result, previous));
             });
         }
 
@@ -217,7 +216,7 @@ namespace DearFarmer.UI
             this.Letter.MyVote = -1;
             this.S.Store.MarkDirty();
             this.Busy = true;
-            this.SetStatus(this.S.Text("write.sending"), InkSoft);
+            this.SetStatus(this.S.Text("write.sending"), this.InkSoft);
 
             Letter letter = this.Letter;
             Task.Run(async () =>
@@ -226,12 +225,12 @@ namespace DearFarmer.UI
                 this.S.RunOnMainThread(() =>
                 {
                     if (!result.Ok && result.IsNetworkError) letter.Reported = false;
-                    this.OnVoteResult(result, previous, -1);
+                    this.OnVoteResult(result, previous);
                 });
             });
         }
 
-        private void OnVoteResult(ApiResult<VoteResponse> result, int previous, int attempted)
+        private void OnVoteResult(ApiResult<VoteResponse> result, int previous)
         {
             this.Busy = false;
             if (result.Ok)
@@ -272,18 +271,15 @@ namespace DearFarmer.UI
         {
             this.DrawPaper(b, this.S.Text("read.header"));
 
-            // meta: data de recebimento
+            // meta: data de recebimento (ou info passada pela lista)
             string meta = this.FooterInfo ?? this.S.Text("read.date", new { date = TextUtil.FormatDate(this.Letter.DeliveredAtUtc == default ? DateTime.UtcNow : this.Letter.DeliveredAtUtc) });
-            b.DrawString(Game1.smallFont, meta, new Vector2(this.Content.X, this.BodyTop), InkSoft);
+            Vector2 metaSize = Game1.smallFont.MeasureString(meta);
+            float metaX = this.Style.Layout == LetterLayout.Centered ? this.Content.X + (this.Content.Width - metaSize.X) / 2 : this.Content.X;
+            b.DrawString(Game1.smallFont, meta, new Vector2(metaX, this.BodyTop), this.InkSoft);
 
             // corpo
-            int y = this.BodyTop + 28;
             int start = this.Page * this.LinesPerPage;
-            for (int i = start; i < this.Lines.Count && i < start + this.LinesPerPage; i++)
-            {
-                b.DrawString(BodyFont, this.Lines[i], new Vector2(this.Content.X + 8, y), this.Letter.Removed ? InkSoft : Ink);
-                y += BodyFont.LineSpacing;
-            }
+            LetterArt.DrawBodyLines(b, BodyFont, this.Lines, start, this.LinesPerPage, this.BodyArea, this.BodyArea.Y, this.Style, this.Letter.Removed ? this.InkSoft : this.Ink);
 
             // assinatura (última página)
             if (this.Page == this.PageCount - 1 && !this.Letter.Removed)
@@ -291,26 +287,26 @@ namespace DearFarmer.UI
                 string sig = string.IsNullOrWhiteSpace(this.Letter.Name) ? this.S.Text("read.anonymous") : this.S.Text("read.from", new { name = this.Letter.Name });
                 sig = TextUtil.MakeRenderable(sig, BodyFont);
                 Vector2 size = BodyFont.MeasureString(sig);
-                b.DrawString(BodyFont, sig, new Vector2(this.Content.Right - size.X - 8, this.FooterTop - size.Y - 16), Ink);
+                float sx = this.Style.Layout == LetterLayout.Centered ? this.Content.X + (this.Content.Width - size.X) / 2 : this.Content.Right - size.X - 8;
+                b.DrawString(BodyFont, sig, new Vector2(sx, this.FooterTop - size.Y - 16), this.Ink);
             }
 
             // rodapé: votos
             if (this.CanVote)
             {
                 bool enabled = !this.Busy && !this.Letter.Removed;
-                this.DrawButton(b, this.UpButton.bounds, ThumbUpSource, this.S.Text("read.upvote"), Good, this.Letter.MyVote == 1, enabled, this.Hovered == 0);
-                this.DrawButton(b, this.DownButton.bounds, ThumbDownSource, this.S.Text("read.downvote"), Bad, this.Letter.MyVote == -1, enabled, this.Hovered == 1);
+                this.DrawButton(b, this.UpButton.bounds, LetterArt.ThumbUpSource, this.S.Text("read.upvote"), Good, this.Letter.MyVote == 1, enabled, this.Hovered == 0);
+                this.DrawButton(b, this.DownButton.bounds, LetterArt.ThumbDownSource, this.S.Text("read.downvote"), Bad, this.Letter.MyVote == -1, enabled, this.Hovered == 1);
                 bool armed = (Game1.currentGameTime?.TotalGameTime.TotalMilliseconds ?? 0) < this.ReportArmedUntil;
-                this.DrawButton(b, this.ReportButton.bounds, FlagSource, this.Letter.Reported ? this.S.Text("read.reported") : this.S.Text("read.report"), Warn, this.Letter.Reported || armed, enabled && !this.Letter.Reported, this.Hovered == 2);
+                this.DrawButton(b, this.ReportButton.bounds, LetterArt.FlagSource, this.Letter.Reported ? this.S.Text("read.reported") : this.S.Text("read.report"), Warn, this.Letter.Reported || armed, enabled && !this.Letter.Reported, this.Hovered == 2);
             }
 
             // status
             if (!string.IsNullOrEmpty(this.Status))
             {
                 int sx = this.CanVote ? this.ReportButton.bounds.Right + 16 : this.Content.X;
-                int sy = this.Content.Bottom - 56 + 16;
-                string status = TextUtil.Truncate(this.Status, 60);
-                b.DrawString(Game1.smallFont, status, new Vector2(sx, sy), this.StatusColor);
+                int sy = this.FooterTop + 16;
+                b.DrawString(Game1.smallFont, TextUtil.Truncate(this.Status, 60), new Vector2(sx, sy), this.StatusColor);
             }
 
             // páginas
@@ -318,7 +314,7 @@ namespace DearFarmer.UI
             {
                 string pages = $"{this.Page + 1}/{this.PageCount}";
                 Vector2 ps = Game1.smallFont.MeasureString(pages);
-                b.DrawString(Game1.smallFont, pages, new Vector2(this.PrevPage.bounds.X - ps.X - 8, this.PrevPage.bounds.Y + 10), InkSoft);
+                b.DrawString(Game1.smallFont, pages, new Vector2(this.PrevPage.bounds.X - ps.X - 8, this.PrevPage.bounds.Y + 10), this.InkSoft);
                 if (this.Page > 0) this.PrevPage.draw(b);
                 if (this.Page < this.PageCount - 1) this.NextPage.draw(b);
             }

@@ -13,6 +13,8 @@ namespace DearFarmer.Framework
         [JsonProperty("lang")] public string Lang { get; set; }
         [JsonProperty("created_at")] public long CreatedAt { get; set; }
         [JsonProperty("vote_token")] public string VoteToken { get; set; }
+        /// <summary>Design escolhido por quem escreveu (null = padrão).</summary>
+        [JsonProperty("style")] public LetterStyle Style { get; set; }
 
         // --- só no cliente ---
         /// <summary>Dia do jogo (TotalDays) em que foi entregue.</summary>
@@ -49,6 +51,7 @@ namespace DearFarmer.Framework
         [JsonProperty("hidden")] public int Hidden { get; set; }
         [JsonProperty("hidden_reason")] public string HiddenReason { get; set; }
         [JsonProperty("created_at")] public long CreatedAt { get; set; }
+        [JsonProperty("style")] public LetterStyle Style { get; set; }
     }
 
     public sealed class FeedResponse

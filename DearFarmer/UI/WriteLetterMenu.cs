@@ -9,30 +9,34 @@ using StardewValley.Menus;
 
 namespace DearFarmer.UI
 {
-    /// <summary>Tela de escrever uma carta para um fazendeiro distante.</summary>
+    /// <summary>Tela de escrever uma carta para um fazendeiro distante, já com o design escolhido pelo jogador.</summary>
     public sealed class WriteLetterMenu : PaperMenu
     {
         private readonly MultilineTextBox TextBox;
         private readonly ClickableComponent SendButton = new(Rectangle.Empty, "send") { myID = 200, rightNeighborID = 201 };
         private readonly ClickableComponent CancelButton = new(Rectangle.Empty, "cancel") { myID = 201, leftNeighborID = 200, rightNeighborID = 202 };
-        private readonly ClickableComponent SignToggle = new(Rectangle.Empty, "sign") { myID = 202, leftNeighborID = 201 };
+        private readonly ClickableComponent DesignButton = new(Rectangle.Empty, "design") { myID = 202, leftNeighborID = 201, rightNeighborID = 203 };
+        private readonly ClickableComponent SignToggle = new(Rectangle.Empty, "sign") { myID = 203, leftNeighborID = 202 };
 
         private bool SignWithName;
         private bool Sending;
         private bool Sent;
         private double CloseAt;
         private string Status = "";
-        private Color StatusColor = InkSoft;
+        private Color StatusColor;
         private int Hovered = -1;
 
-        public WriteLetterMenu(ModServices services) : base(services)
+        public WriteLetterMenu(ModServices services) : base(services, services.Store.State.Style)
         {
             this.SignWithName = this.S.Config().SignWithFarmerName;
+            this.StatusColor = this.InkSoft;
             this.TextBox = new MultilineTextBox(Rectangle.Empty, Game1.dialogueFont)
             {
                 MaxLength = ModServices.MaxBodyLength,
                 Placeholder = this.S.Text("write.placeholder"),
-                TextColor = Ink,
+                TextColor = this.Ink,
+                PlaceholderColor = this.InkSoft,
+                Centered = this.Style.Layout == LetterLayout.Centered,
             };
             this.TextBox.OnTextChanged = this.OnTextChanged;
             this.TextBox.Text = this.S.Store.State.Draft ?? "";
@@ -53,9 +57,19 @@ namespace DearFarmer.UI
             if (this.TextBox != null) this.LayoutContent();
         }
 
+        /// <summary>Reaplica o design salvo (chamado ao voltar do editor de design).</summary>
+        public void RefreshStyle()
+        {
+            this.SetStyle(this.S.Store.State.Style);
+            this.TextBox.TextColor = this.Ink;
+            this.TextBox.PlaceholderColor = this.InkSoft;
+            this.TextBox.Centered = this.Style.Layout == LetterLayout.Centered;
+            this.TextBox.Selected = true;
+        }
+
         private void LayoutContent()
         {
-            int buttonH = 56;
+            const int buttonH = 56;
             int footerTop = this.Content.Bottom - buttonH - 8;
             int hintTop = this.BodyTop;
             int hintLines = TextUtil.Wrap(this.S.Text("write.hint"), Game1.smallFont, this.Content.Width - 8).Count;
@@ -64,12 +78,15 @@ namespace DearFarmer.UI
 
             int wSend = this.MeasureButton(this.S.Text("write.send"), true);
             int wCancel = this.MeasureButton(this.S.Text("write.cancel"), false);
-            this.SendButton.bounds = new Rectangle(this.Content.X, footerTop, wSend, buttonH);
-            this.CancelButton.bounds = new Rectangle(this.Content.X + wSend + 8, footerTop, wCancel, buttonH);
+            int wDesign = this.MeasureButton(this.S.Text("write.design"), true);
+            int x = this.Content.X;
+            this.SendButton.bounds = new Rectangle(x, footerTop, wSend, buttonH); x += wSend + 8;
+            this.CancelButton.bounds = new Rectangle(x, footerTop, wCancel, buttonH); x += wCancel + 8;
+            this.DesignButton.bounds = new Rectangle(x, footerTop, wDesign, buttonH); x += wDesign + 16;
 
             string signLabel = this.SignLabel();
             int wSign = (int)Game1.smallFont.MeasureString(signLabel).X + 44;
-            this.SignToggle.bounds = new Rectangle(this.CancelButton.bounds.Right + 16, footerTop + 8, wSign, 40);
+            this.SignToggle.bounds = new Rectangle(x, footerTop + 8, wSign, 40);
         }
 
         public override void snapToDefaultClickableComponent()
@@ -104,6 +121,7 @@ namespace DearFarmer.UI
 
             if (this.SendButton.containsPoint(x, y)) { this.TrySend(); return; }
             if (this.CancelButton.containsPoint(x, y)) { this.Close(); return; }
+            if (this.DesignButton.containsPoint(x, y)) { this.OpenDesigner(); return; }
             if (this.SignToggle.containsPoint(x, y))
             {
                 this.SignWithName = !this.SignWithName;
@@ -114,10 +132,18 @@ namespace DearFarmer.UI
             this.TextBox.ReceiveLeftClick(x, y);
         }
 
+        private void OpenDesigner()
+        {
+            this.TextBox.Selected = false;
+            this.S.Store.Save();
+            Game1.playSound("smallSelect");
+            Game1.activeClickableMenu = new LetterDesignMenu(this.S, returnTo: this);
+        }
+
         public override void performHoverAction(int x, int y)
         {
             base.performHoverAction(x, y);
-            this.Hovered = this.SendButton.containsPoint(x, y) ? 0 : this.CancelButton.containsPoint(x, y) ? 1 : this.SignToggle.containsPoint(x, y) ? 2 : -1;
+            this.Hovered = this.SendButton.containsPoint(x, y) ? 0 : this.CancelButton.containsPoint(x, y) ? 1 : this.DesignButton.containsPoint(x, y) ? 2 : this.SignToggle.containsPoint(x, y) ? 3 : -1;
         }
 
         public override void receiveScrollWheelAction(int direction) => this.TextBox.ReceiveScrollWheel(direction);
@@ -138,6 +164,7 @@ namespace DearFarmer.UI
         {
             if (b == Buttons.B && !this.Sending) { this.Close(); return; }
             if (b == Buttons.Y) { this.TrySend(); return; }
+            if (b == Buttons.X && !this.Sending && !this.Sent) { this.OpenDesigner(); return; }
             base.receiveGamePadButton(b);
         }
 
@@ -189,13 +216,14 @@ namespace DearFarmer.UI
 
             this.Sending = true;
             this.TextBox.Selected = false;
-            this.SetStatus(this.S.Text("write.sending"), InkSoft);
+            this.SetStatus(this.S.Text("write.sending"), this.InkSoft);
 
             string name = this.SignWithName ? Game1.player?.Name : null;
             string lang = this.S.Language;
+            LetterStyle style = this.S.Store.State.Style?.Clone();
             Task.Run(async () =>
             {
-                ApiResult<SendResponse> result = await this.S.Api.SendLetterAsync(body, name, lang);
+                ApiResult<SendResponse> result = await this.S.Api.SendLetterAsync(body, name, lang, style);
                 this.S.RunOnMainThread(() => this.OnSendResult(result));
             });
         }
@@ -235,39 +263,43 @@ namespace DearFarmer.UI
         {
             this.DrawPaper(b, this.S.Text("write.title"));
 
-            // dica + cartas restantes hoje
+            // dica
             int y = this.BodyTop;
+            bool centered = this.Style.Layout == LetterLayout.Centered;
             foreach (string line in TextUtil.Wrap(this.S.Text("write.hint"), Game1.smallFont, this.Content.Width - 8))
             {
-                b.DrawString(Game1.smallFont, line, new Vector2(this.Content.X, y), InkSoft);
+                float lx = centered ? this.Content.X + (this.Content.Width - Game1.smallFont.MeasureString(line).X) / 2 : this.Content.X;
+                b.DrawString(Game1.smallFont, line, new Vector2(lx, y), this.InkSoft);
                 y += Game1.smallFont.LineSpacing;
             }
 
-            this.TextBox.Draw(b);
+            this.TextBox.Draw(b, drawBox: !this.Style.DarkPaper);
 
             // contador
             string counter = this.S.Text("write.counter", new { count = this.TextBox.Length, max = ModServices.MaxBodyLength });
             Vector2 cs = Game1.smallFont.MeasureString(counter);
-            b.DrawString(Game1.smallFont, counter, new Vector2(this.TextBox.Bounds.Right - cs.X - 16, this.TextBox.Bounds.Bottom - cs.Y - 4), this.TextBox.Length >= ModServices.MaxBodyLength ? Bad : InkSoft);
+            b.DrawString(Game1.smallFont, counter, new Vector2(this.TextBox.Bounds.Right - cs.X - 16, this.TextBox.Bounds.Bottom - cs.Y - 4), this.TextBox.Length >= ModServices.MaxBodyLength ? Bad : this.InkSoft);
 
             // rodapé
             bool enabled = !this.Sending && !this.Sent;
-            this.DrawButton(b, this.SendButton.bounds, PenSource, this.S.Text("write.send"), Accent, false, enabled, this.Hovered == 0);
+            this.DrawButton(b, this.SendButton.bounds, LetterArt.PenSource, this.S.Text("write.send"), Accent, false, enabled, this.Hovered == 0);
             this.DrawButton(b, this.CancelButton.bounds, null, this.S.Text("write.cancel"), Color.White, false, !this.Sending, this.Hovered == 1);
+            this.DrawButton(b, this.DesignButton.bounds, LetterArt.PaletteSource, this.S.Text("write.design"), new Color(226, 120, 160), false, enabled, this.Hovered == 2);
 
             // toggle de assinatura (checkbox do jogo)
             Rectangle check = this.SignWithName ? new Rectangle(236, 425, 9, 9) : new Rectangle(227, 425, 9, 9);
             b.Draw(Game1.mouseCursors, new Vector2(this.SignToggle.bounds.X, this.SignToggle.bounds.Y + 2), check, Color.White, 0f, Vector2.Zero, 4f, SpriteEffects.None, 0.9f);
-            b.DrawString(Game1.smallFont, this.SignLabel(), new Vector2(this.SignToggle.bounds.X + 44, this.SignToggle.bounds.Y + 6), this.Hovered == 2 ? Ink : InkSoft);
+            b.DrawString(Game1.smallFont, this.SignLabel(), new Vector2(this.SignToggle.bounds.X + 44, this.SignToggle.bounds.Y + 6), this.Hovered == 3 ? this.Ink : this.InkSoft);
 
             // status / cartas restantes
             int remaining = this.S.Store.RemainingSendsToday(this.S.Config().MaxSentPerGameDay);
             string info = !string.IsNullOrEmpty(this.Status) ? this.Status : remaining > 0 ? this.S.Text("write.remaining", new { count = remaining }) : this.S.Text("write.remaining.none");
-            Color infoColor = !string.IsNullOrEmpty(this.Status) ? this.StatusColor : InkSoft;
+            Color infoColor = !string.IsNullOrEmpty(this.Status) ? this.StatusColor : this.InkSoft;
             Vector2 isz = Game1.smallFont.MeasureString(info);
-            float ix = this.Content.Right - isz.X;
+            int infoRight = this.Content.Right - (this.Style.Layout == LetterLayout.Minimal ? 84 : 0);
+            float ix = infoRight - isz.X;
             float minX = this.SignToggle.bounds.Right + 12;
-            if (ix < minX) { info = TextUtil.Truncate(info, 40); isz = Game1.smallFont.MeasureString(info); ix = Math.Max(minX, this.Content.Right - isz.X); }
+            if (ix < minX) { info = TextUtil.Truncate(info, 36); isz = Game1.smallFont.MeasureString(info); ix = Math.Max(minX, infoRight - isz.X); }
             b.DrawString(Game1.smallFont, info, new Vector2(ix, this.SignToggle.bounds.Y + 6), infoColor);
 
             base.draw(b);
