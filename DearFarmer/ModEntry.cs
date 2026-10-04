@@ -204,6 +204,7 @@ namespace DearFarmer
             gmcm.AddNumberOption(m, () => this.Config.MaxSentPerGameDay, v => this.Config.MaxSentPerGameDay = v, () => this.S.Text("config.maxSentPerDay.name"), () => this.S.Text("config.maxSentPerDay.tooltip"), 1, 10);
             gmcm.AddBoolOption(m, () => this.Config.SignWithFarmerName, v => this.Config.SignWithFarmerName = v, () => this.S.Text("config.signWithName.name"));
             gmcm.AddKeybindList(m, () => this.Config.OpenMenuKey, v => this.Config.OpenMenuKey = v, () => this.S.Text("config.openMenuKey.name"), () => this.S.Text("config.openMenuKey.tooltip"));
+            gmcm.AddBoolOption(m, () => this.Config.ShowDrawings, v => this.Config.ShowDrawings = v, () => this.S.Text("config.showDrawings.name"), () => this.S.Text("config.showDrawings.tooltip"));
             gmcm.AddBoolOption(m, () => this.Config.ShowHudMessage, v => this.Config.ShowHudMessage = v, () => this.S.Text("config.showHudMessage.name"));
             gmcm.AddBoolOption(m, () => this.Config.DeliverOnlyWhenMailboxEmpty, v => this.Config.DeliverOnlyWhenMailboxEmpty = v, () => this.S.Text("config.deliverOnlyWhenMailboxEmpty.name"), () => this.S.Text("config.deliverOnlyWhenMailboxEmpty.tooltip"));
         }

@@ -52,6 +52,24 @@ Como funciona por baixo: a carta leva um objeto `style` com ids curtos (`{"paper
 
 Para adicionar um design novo: edite `LetterCatalog` em `DearFarmer/Framework/LetterStyle.cs` (cores e listas), desenhe o sprite em `tools/make-ui-png.mjs` e rode `node tools/make-ui-png.mjs`; depois acrescente o nome em `i18n/*.json` (`design.<campo>.<id>`).
 
+### Desenhos (mini Paint)
+
+Na aba **Desenhar** do editor de design o jogador pinta por cima do papel, estilo MS Paint em pixel art:
+
+- Grade de **160x90 células** (cada célula = 2x2 pixels do papel de 320x180), então o traço tem a mesma "resolução" do jogo e nunca destoa.
+- **Paleta fixa de 16 cores** (a primeira é a borracha). Ferramentas: lápis em 3 tamanhos, linha, balde, desfazer (40 passos), limpar. Atalhos: `P`, `L`, `B`, `E`, `1-3`, `Ctrl+Z`.
+- O desenho fica **entre o papel e o texto**; o texto ganha um contorno na cor do papel para continuar legível.
+- Formato de transporte: `"d1:" + base64` de runs RLE (`backend/src/drawing.js` e `DrawingCanvas.cs` são espelhos). Canvas vazio = ~110 bytes; desenho típico = 1 a 4 KB; teto de 10 000 caracteres no servidor, que também **decodifica e valida** o canvas antes de aceitar.
+
+Travas de moderação específicas para desenhos (todas ligadas por padrão):
+
+| Trava | Regra | Onde |
+|---|---|---|
+| Remoção mais rápida | carta com desenho é removida com **2 denúncias** (`HIDE_REPORTS_DRAWING`) em vez de 3; o desenho é apagado do banco junto com o texto | servidor |
+| Pausa para o autor | autor com desenho denunciado nos últimos **14 dias** (`DRAWING_BAN_DAYS`) continua podendo escrever, mas a carta vai **sem desenho** e o mod avisa (`drawing_dropped`) | servidor + mod |
+| Opção do jogador | `ShowDrawings` no config / GMCM: desligado, as cartas chegam só com texto, design e adesivos | mod |
+| Moderação manual | `GET /admin/letters?drawing=1` lista só cartas com desenho, e a listagem normal mostra desenhos primeiro | servidor |
+
 ### Anti-abuso (em camadas)
 
 | Camada | Regra | Onde |
@@ -103,7 +121,7 @@ npx wrangler secret put ADMIN_KEY           # opcional, para os endpoints /admin
 npx wrangler deploy                         # imprime a URL: https://dear-farmer.<sua-conta>.workers.dev
 ```
 
-Se o banco foi criado antes do design de cartas, aplique a migração: `npx wrangler d1 execute dear-farmer --remote --file=./migrations/0002_style.sql`.
+Se o banco foi criado antes do design de cartas ou dos desenhos, aplique as migrações: `npx wrangler d1 execute dear-farmer --remote --file=./migrations/0002_style.sql` e `... --file=./migrations/0003_drawing.sql`.
 
 Teste: `curl https://dear-farmer.<sua-conta>.workers.dev/v1/health`.
 
@@ -145,6 +163,7 @@ Depois, em `Mods/DearFarmer/config.json` (criado na primeira execução), coloqu
 | `SignWithFarmerName` | true | assinar com o nome do fazendeiro (pode trocar na hora de escrever) |
 | `OpenMenuKey` | F7 | abre o menu de qualquer lugar |
 | `ShowHudMessage` | true | aviso no HUD ao receber carta |
+| `ShowDrawings` | true | mostrar desenhos de outros jogadores |
 | `DeliverOnlyWhenMailboxEmpty` | false | não entregar em dias com correio do jogo |
 | `FetchBatchSize` | 8 | cartas buscadas por requisição |
 | `PreferredLanguage` | (idioma do jogo) | ex. `pt-BR`, `en` |
@@ -156,8 +175,8 @@ Todas as rotas em `/v1` exigem `Authorization: Bearer <token>` e aceitam/retorna
 | Rota | Corpo | Resposta |
 |---|---|---|
 | `GET /v1/health` | — | limites e versão mínima do cliente |
-| `POST /v1/letters` | `{ body, name?, lang?, style? }` | `{ id, remaining_hour, remaining_day }` |
-| `POST /v1/feed` | `{ count, exclude: [ids], lang }` | `{ letters: [{ id, name, body, lang, created_at, style, vote_token }] }` |
+| `POST /v1/letters` | `{ body, name?, lang?, style?, drawing? }` | `{ id, remaining_hour, remaining_day, drawing_dropped }` |
+| `POST /v1/feed` | `{ count, exclude: [ids], lang }` | `{ letters: [{ id, name, body, lang, created_at, style, drawing, vote_token }] }` |
 | `POST /v1/letters/:id/vote` | `{ value: 1 \| -1 \| 0, vote_token }` | `{ score, upvotes, downvotes, removed }` |
 | `POST /v1/letters/:id/report` | `{ vote_token, reason? }` | idem |
 | `GET /v1/mine` | — | suas cartas com votos e status |

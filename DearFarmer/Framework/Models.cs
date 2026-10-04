@@ -15,6 +15,8 @@ namespace DearFarmer.Framework
         [JsonProperty("vote_token")] public string VoteToken { get; set; }
         /// <summary>Design escolhido por quem escreveu (null = padrão).</summary>
         [JsonProperty("style")] public LetterStyle Style { get; set; }
+        /// <summary>Desenho pixel art codificado (ver DrawingCanvas), ou null.</summary>
+        [JsonProperty("drawing")] public string Drawing { get; set; }
 
         // --- só no cliente ---
         /// <summary>Dia do jogo (TotalDays) em que foi entregue.</summary>
@@ -52,6 +54,7 @@ namespace DearFarmer.Framework
         [JsonProperty("hidden_reason")] public string HiddenReason { get; set; }
         [JsonProperty("created_at")] public long CreatedAt { get; set; }
         [JsonProperty("style")] public LetterStyle Style { get; set; }
+        [JsonProperty("drawing")] public string Drawing { get; set; }
     }
 
     public sealed class FeedResponse
@@ -69,6 +72,8 @@ namespace DearFarmer.Framework
         [JsonProperty("id")] public long Id { get; set; }
         [JsonProperty("remaining_hour")] public int RemainingHour { get; set; }
         [JsonProperty("remaining_day")] public int RemainingDay { get; set; }
+        /// <summary>Não-nulo quando o servidor descartou o desenho (ex.: "drawing_blocked").</summary>
+        [JsonProperty("drawing_dropped")] public string DrawingDropped { get; set; }
     }
 
     public sealed class VoteResponse

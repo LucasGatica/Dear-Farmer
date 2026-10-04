@@ -29,6 +29,8 @@ namespace DearFarmer.UI
         public int Padding = 12;
         /// <summary>Centraliza as linhas (layout "centered").</summary>
         public bool Centered;
+        /// <summary>Contorno na cor do papel, para o texto continuar legível sobre um desenho.</summary>
+        public Color? HaloColor;
         public Action OnTextChanged;
 
         private struct Line { public int Start; public int End; public string Text; }
@@ -322,7 +324,7 @@ namespace DearFarmer.UI
             {
                 Line line = this.Lines[i];
                 float lx = this.LineX(line);
-                b.DrawString(this.Font, line.Text, new Vector2(lx, y), this.TextColor);
+                LetterArt.DrawTextWithHalo(b, this.Font, line.Text, new Vector2(lx, y), this.TextColor, 1f, this.HaloColor);
                 if (showCaret && i == caretLine)
                 {
                     float cx = this.Font.MeasureString(line.Text.Substring(0, Math.Max(0, Math.Min(line.Text.Length, this.Caret - line.Start)))).X;

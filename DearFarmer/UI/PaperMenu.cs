@@ -16,6 +16,11 @@ namespace DearFarmer.UI
         protected readonly ModServices S;
         protected ResolvedStyle Style;
         protected LetterArt.Frame Frame;
+        /// <summary>Textura do desenho da carta (null = sem desenho).</summary>
+        protected Texture2D DrawingTexture;
+        protected bool HasDrawing => this.DrawingTexture != null && !this.DrawingTexture.IsDisposed;
+        /// <summary>Cor do contorno do texto quando há desenho por baixo.</summary>
+        protected Color? TextHalo => this.HasDrawing ? this.Style.PaperColor : null;
 
         protected static readonly Color Accent = new(86, 150, 150);
         protected static readonly Color Good = new(96, 160, 80);
@@ -38,6 +43,27 @@ namespace DearFarmer.UI
         {
             this.Style = LetterCatalog.Resolve(style);
             this.Relayout();
+        }
+
+        /// <summary>Define (ou remove, com null/vazio) o desenho exibido sobre o papel.</summary>
+        protected void SetDrawing(string encoded)
+        {
+            this.DisposeDrawing();
+            DrawingCanvas canvas = DrawingCanvas.Decode(encoded);
+            if (canvas != null && !canvas.IsEmpty)
+                this.DrawingTexture = canvas.CreateTexture(Game1.graphics.GraphicsDevice);
+        }
+
+        protected void DisposeDrawing()
+        {
+            this.DrawingTexture?.Dispose();
+            this.DrawingTexture = null;
+        }
+
+        protected override void cleanupBeforeExit()
+        {
+            this.DisposeDrawing();
+            base.cleanupBeforeExit();
         }
 
         /// <summary>Recalcula tamanho e posição conforme a resolução (o papel encolhe em telas pequenas).</summary>
@@ -64,7 +90,7 @@ namespace DearFarmer.UI
         protected void DrawPaper(SpriteBatch b, string headerText)
         {
             b.Draw(Game1.fadeToBlackRect, Game1.graphics.GraphicsDevice.Viewport.Bounds, Color.Black * 0.6f);
-            LetterArt.DrawPaper(b, this.S, this.Style, this.Frame, headerText);
+            LetterArt.DrawPaper(b, this.S, this.Style, this.Frame, headerText, drawing: this.HasDrawing ? this.DrawingTexture : null);
         }
 
         /// <summary>Botão com ícone e rótulo, no estilo das caixas do jogo.</summary>

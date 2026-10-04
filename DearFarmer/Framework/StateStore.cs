@@ -27,6 +27,9 @@ namespace DearFarmer.Framework
         /// <summary>Design atual das cartas que este jogador escreve.</summary>
         public LetterStyle Style { get; set; } = new();
 
+        /// <summary>Desenho atual (codificado) que vai junto com as cartas, ou null.</summary>
+        public string Drawing { get; set; }
+
         /// <summary>Última tentativa de buscar cartas (UTC), para não martelar um servidor fora do ar.</summary>
         public DateTime LastFetchAttemptUtc { get; set; }
         public bool LastFetchFailed { get; set; }

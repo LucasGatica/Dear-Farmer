@@ -47,6 +47,7 @@ namespace DearFarmer.UI
             this.FooterInfo = footerInfo;
             this.ReturnTo = returnTo;
             this.StatusColor = this.InkSoft;
+            if (this.S.Config().ShowDrawings) this.SetDrawing(letter.Drawing);
 
             this.PrevPage = new ClickableTextureComponent(Rectangle.Empty, Game1.mouseCursors, new Rectangle(352, 495, 12, 11), 4f) { myID = 103, rightNeighborID = 104 };
             this.NextPage = new ClickableTextureComponent(Rectangle.Empty, Game1.mouseCursors, new Rectangle(365, 495, 12, 11), 4f) { myID = 104, leftNeighborID = 103 };
@@ -166,6 +167,7 @@ namespace DearFarmer.UI
             this.S.Store.Save();
             if (this.ReturnTo != null)
             {
+                this.DisposeDrawing();
                 Game1.playSound("bigDeSelect");
                 (this.ReturnTo as LetterListMenu)?.OnReturned();
                 Game1.activeClickableMenu = this.ReturnTo;
@@ -275,11 +277,11 @@ namespace DearFarmer.UI
             string meta = this.FooterInfo ?? this.S.Text("read.date", new { date = TextUtil.FormatDate(this.Letter.DeliveredAtUtc == default ? DateTime.UtcNow : this.Letter.DeliveredAtUtc) });
             Vector2 metaSize = Game1.smallFont.MeasureString(meta);
             float metaX = this.Style.Layout == LetterLayout.Centered ? this.Content.X + (this.Content.Width - metaSize.X) / 2 : this.Content.X;
-            b.DrawString(Game1.smallFont, meta, new Vector2(metaX, this.BodyTop), this.InkSoft);
+            LetterArt.DrawTextWithHalo(b, Game1.smallFont, meta, new Vector2(metaX, this.BodyTop), this.InkSoft, 1f, this.TextHalo);
 
             // corpo
             int start = this.Page * this.LinesPerPage;
-            LetterArt.DrawBodyLines(b, BodyFont, this.Lines, start, this.LinesPerPage, this.BodyArea, this.BodyArea.Y, this.Style, this.Letter.Removed ? this.InkSoft : this.Ink);
+            LetterArt.DrawBodyLines(b, BodyFont, this.Lines, start, this.LinesPerPage, this.BodyArea, this.BodyArea.Y, this.Style, this.Letter.Removed ? this.InkSoft : this.Ink, 1f, this.TextHalo);
 
             // assinatura (última página)
             if (this.Page == this.PageCount - 1 && !this.Letter.Removed)
@@ -288,7 +290,7 @@ namespace DearFarmer.UI
                 sig = TextUtil.MakeRenderable(sig, BodyFont);
                 Vector2 size = BodyFont.MeasureString(sig);
                 float sx = this.Style.Layout == LetterLayout.Centered ? this.Content.X + (this.Content.Width - size.X) / 2 : this.Content.Right - size.X - 8;
-                b.DrawString(BodyFont, sig, new Vector2(sx, this.FooterTop - size.Y - 16), this.Ink);
+                LetterArt.DrawTextWithHalo(b, BodyFont, sig, new Vector2(sx, this.FooterTop - size.Y - 16), this.Ink, 1f, this.TextHalo);
             }
 
             // rodapé: votos

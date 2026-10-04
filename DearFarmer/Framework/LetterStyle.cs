@@ -56,6 +56,8 @@ namespace DearFarmer.Framework
     {
         public LetterStyle Source;
         public Color PaperTint;
+        /// <summary>Cor aproximada do papel na tela (textura creme × tinta), para halos e amostras.</summary>
+        public Color PaperColor;
         public Color Ink;
         public Color InkSoft;
         public Color Header;
@@ -172,6 +174,7 @@ namespace DearFarmer.Framework
             {
                 Source = style,
                 PaperTint = paper.Tint,
+                PaperColor = new Color(246 * paper.Tint.R / 255, 232 * paper.Tint.G / 255, 196 * paper.Tint.B / 255),
                 DarkPaper = paper.Dark,
                 Ink = ink.Color,
                 InkSoft = soft,

@@ -27,6 +27,9 @@ namespace DearFarmer
         /// <summary>Só entregar cartas do mod em dias sem correio do jogo (evita misturar com cartas importantes).</summary>
         public bool DeliverOnlyWhenMailboxEmpty { get; set; } = false;
 
+        /// <summary>Mostrar os desenhos feitos por outros jogadores nas cartas recebidas (desligue para só texto e adesivos).</summary>
+        public bool ShowDrawings { get; set; } = true;
+
         /// <summary>Quantas cartas buscar do servidor por vez (reduz requisições). Entre 2 e 20.</summary>
         public int FetchBatchSize { get; set; } = 8;
 

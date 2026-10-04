@@ -1,5 +1,6 @@
 // Teste de fumaça: roda contra `npm run dev` (http://127.0.0.1:8787).
 // Uso: BASE=http://127.0.0.1:8787 node test/smoke.mjs
+import { encodeDrawing, decodeDrawing, DRAWING_CELLS, DRAWING_W } from '../src/drawing.js';
 const BASE = process.env.BASE || 'http://127.0.0.1:8787';
 const ADMIN = process.env.ADMIN_KEY || 'dev-admin';
 let failures = 0;
@@ -116,6 +117,48 @@ console.log('remoção por denúncias (HIDE_REPORTS=3)');
     if (r.data.removed) { removed = true; check(`removida após ${v - 29} denúncias`, v - 29 === 3); break; }
   }
   check('carta removida por denúncia', removed);
+}
+
+console.log('desenhos (formato)');
+{
+  const cells = new Uint8Array(DRAWING_CELLS);
+  for (let x = 20; x < 60; x++) { cells[10 * DRAWING_W + x] = 4; cells[11 * DRAWING_W + x] = 4; }
+  for (let y = 20; y < 70; y++) cells[y * DRAWING_W + 80] = 7;
+  const enc = encodeDrawing(cells);
+  check('encode/decode ida e volta', decodeDrawing(enc).every((v, i) => v === cells[i]) && enc.length < 1200, enc.length);
+  check('vazio codifica pequeno', encodeDrawing(new Uint8Array(DRAWING_CELLS)).length < 200);
+  check('inválido -> null', decodeDrawing('d1:AAAA') === null && decodeDrawing('x') === null);
+
+  let r = await call('POST', '/v1/letters', { token: tok(60), body: { body: letter(700), drawing: 'd1:AAAA' } }); check('drawing malformado -> 400', r.status === 400 && r.data.error === 'bad_drawing');
+  r = await call('POST', '/v1/letters', { token: tok(60), body: { body: letter(701), drawing: 'd1:' + 'A'.repeat(12000) } }); check('drawing gigante -> 413', r.status === 413);
+  r = await call('POST', '/v1/letters', { token: tok(60), body: { body: letter(702), drawing: encodeDrawing(new Uint8Array(DRAWING_CELLS)) } }); check('drawing vazio aceito como sem desenho', r.status === 201 && r.data.drawing_dropped === null);
+  const m0 = await call('GET', '/v1/mine', { token: tok(60) }); check('vazio vira null', m0.data.letters[0].drawing === null);
+
+  r = await call('POST', '/v1/letters', { token: tok(60), body: { body: letter(703), lang: 'pt-BR', drawing: enc } }); check('carta com desenho -> 201', r.status === 201 && r.data.drawing_dropped === null, r.data);
+  const drawnId = r.data.id;
+  const f = await call('POST', '/v1/feed', { token: tok(70), body: { count: 20, lang: 'pt-BR' } });
+  const got = f.data.letters.find((l) => l.id === drawnId);
+  check('desenho volta no feed', got && got.drawing === enc, got && got.drawing && got.drawing.length);
+
+  console.log('desenhos (moderação: 2 denúncias removem, autor fica sem desenhar)');
+  let removed = false;
+  for (let v = 70; v < 73; v++) {
+    const ff = v === 70 ? f : await call('POST', '/v1/feed', { token: tok(v), body: { count: 20, lang: 'pt-BR' } });
+    const L = ff.data.letters.find((l) => l.id === drawnId);
+    if (!L) { check(`leitor ${v} recebeu a carta com desenho`, false, ff.data); break; }
+    const rr = await call('POST', `/v1/letters/${drawnId}/report`, { token: tok(v), body: { vote_token: L.vote_token, reason: 'desenho' } });
+    if (rr.data.removed) { removed = true; check(`removida após ${v - 69} denúncias`, v - 69 === 2); break; }
+  }
+  check('carta com desenho removida', removed);
+  const m1 = await call('GET', '/v1/mine', { token: tok(60) });
+  const hidden = m1.data.letters.find((l) => l.id === drawnId);
+  check('desenho apagado junto', hidden && hidden.hidden === 1 && hidden.drawing === null, hidden);
+  r = await call('POST', '/v1/letters', { token: tok(60), body: { body: letter(704), drawing: enc } });
+  check('autor bloqueado: carta vai sem desenho', r.status === 201 && r.data.drawing_dropped === 'drawing_blocked', r.data);
+  const m2 = await call('GET', '/v1/mine', { token: tok(60) });
+  check('carta salva sem desenho', m2.data.letters.find((l) => l.id === r.data.id).drawing === null);
+  const a = await call('GET', '/admin/letters?drawing=1', { headers: { 'X-Admin-Key': ADMIN } });
+  check('admin filtra desenhos', a.status === 200 && a.data.letters.every((l) => l.drawing), a.data);
 }
 
 console.log('autor apaga a própria carta');

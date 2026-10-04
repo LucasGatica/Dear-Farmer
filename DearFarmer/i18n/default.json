@@ -126,5 +126,17 @@
   "design.sticker.strawberry": "Strawberry",
   "design.sticker.junimo": "Junimo",
   "design.sticker.chicken": "Chicken",
-  "design.sticker.mushroom": "Mushroom"
+  "design.sticker.mushroom": "Mushroom",
+  "design.tab.style": "Design",
+  "design.tab.paint": "Paint",
+  "paint.hint": "Drag on the letter to paint. Keys: P pencil, L line, B bucket, E eraser, 1-3 size, Ctrl+Z undo. The drawing travels with your letters; drawings reported by readers are removed and block you from drawing for a while.",
+  "paint.tool.pencil": "Pencil",
+  "paint.tool.line": "Line",
+  "paint.tool.fill": "Bucket",
+  "paint.size": "Size {{size}}",
+  "paint.undo": "Undo",
+  "paint.clear": "Clear",
+  "error.drawingBlocked": "Your letter was sent without the drawing: a recent drawing of yours was reported, so drawing is paused for a while.",
+  "config.showDrawings.name": "Show drawings from other players",
+  "config.showDrawings.tooltip": "Turn off to receive letters as text and stickers only (useful for kids or if you prefer not to see freehand drawings)."
 }

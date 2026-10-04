@@ -40,6 +40,8 @@ namespace DearFarmer.UI
             };
             this.TextBox.OnTextChanged = this.OnTextChanged;
             this.TextBox.Text = this.S.Store.State.Draft ?? "";
+            this.SetDrawing(this.S.Store.State.Drawing);
+            this.TextBox.HaloColor = this.TextHalo;
             this.LayoutContent();
             this.TextBox.Selected = true;
             Game1.playSound("shwip");
@@ -64,6 +66,8 @@ namespace DearFarmer.UI
             this.TextBox.TextColor = this.Ink;
             this.TextBox.PlaceholderColor = this.InkSoft;
             this.TextBox.Centered = this.Style.Layout == LetterLayout.Centered;
+            this.SetDrawing(this.S.Store.State.Drawing);
+            this.TextBox.HaloColor = this.TextHalo;
             this.TextBox.Selected = true;
         }
 
@@ -221,9 +225,10 @@ namespace DearFarmer.UI
             string name = this.SignWithName ? Game1.player?.Name : null;
             string lang = this.S.Language;
             LetterStyle style = this.S.Store.State.Style?.Clone();
+            string drawing = this.HasDrawing ? this.S.Store.State.Drawing : null;
             Task.Run(async () =>
             {
-                ApiResult<SendResponse> result = await this.S.Api.SendLetterAsync(body, name, lang, style);
+                ApiResult<SendResponse> result = await this.S.Api.SendLetterAsync(body, name, lang, style, drawing);
                 this.S.RunOnMainThread(() => this.OnSendResult(result));
             });
         }
@@ -240,6 +245,13 @@ namespace DearFarmer.UI
                 this.CloseAt = (Game1.currentGameTime?.TotalGameTime.TotalMilliseconds ?? 0) + 1800;
                 Game1.playSound("newRecipe");
                 Game1.addHUDMessage(HUDMessage.ForCornerTextbox(this.S.Text("hud.sent")));
+                if (!string.IsNullOrEmpty(result.Data?.DrawingDropped))
+                {
+                    // servidor aceitou a carta mas descartou o desenho (autor com desenho denunciado recentemente)
+                    this.SetStatus(this.S.Text("error.drawingBlocked"), Warn);
+                    Game1.addHUDMessage(new HUDMessage(this.S.Text("error.drawingBlocked"), HUDMessage.error_type));
+                    this.CloseAt += 2500;
+                }
             }
             else
             {
@@ -269,11 +281,11 @@ namespace DearFarmer.UI
             foreach (string line in TextUtil.Wrap(this.S.Text("write.hint"), Game1.smallFont, this.Content.Width - 8))
             {
                 float lx = centered ? this.Content.X + (this.Content.Width - Game1.smallFont.MeasureString(line).X) / 2 : this.Content.X;
-                b.DrawString(Game1.smallFont, line, new Vector2(lx, y), this.InkSoft);
+                LetterArt.DrawTextWithHalo(b, Game1.smallFont, line, new Vector2(lx, y), this.InkSoft, 1f, this.TextHalo);
                 y += Game1.smallFont.LineSpacing;
             }
 
-            this.TextBox.Draw(b, drawBox: !this.Style.DarkPaper);
+            this.TextBox.Draw(b, drawBox: !this.Style.DarkPaper && !this.HasDrawing);
 
             // contador
             string counter = this.S.Text("write.counter", new { count = this.TextBox.Length, max = ModServices.MaxBodyLength });

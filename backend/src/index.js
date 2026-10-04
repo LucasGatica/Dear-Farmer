@@ -6,7 +6,7 @@
  *
  * Rotas (todas JSON, prefixo /v1):
  *   GET  /v1/health                      -> status + limites (para o mod mostrar na UI)
- *   POST /v1/letters                     -> envia uma carta           { name?, body, lang?, style? }
+ *   POST /v1/letters                     -> envia uma carta           { name?, body, lang?, style?, drawing? }
  *   POST /v1/feed                        -> pede cartas para entregar { count, exclude:[ids], lang }
  *   POST /v1/letters/:id/vote            -> vota                      { value: 1|-1|0, vote_token }
  *   POST /v1/letters/:id/report          -> denuncia                  { vote_token, reason? }
@@ -23,6 +23,8 @@
  * `Authorization: Bearer <token>`. O servidor só guarda sha256(token) (author_id).
  * Não há cadastro, senha ou e-mail.
  */
+
+import { decodeDrawing, isDrawingEmpty } from './drawing.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
 const HOUR = 3600;
@@ -153,12 +155,24 @@ async function createLetter(request, env, auth) {
   const name = normalizeName(body.name, int(env.MAX_NAME_LENGTH, 24));
   const lang = normalizeLang(body.lang);
   const style = normalizeStyle(body.style);
+  let drawing = normalizeDrawing(body.drawing, int(env.MAX_DRAWING_CHARS, 10000));
+  let drawingDropped = null;
   const bodyHash = await sha256Hex('body:' + text.toLowerCase().replace(/\s+/g, ' '));
 
   // --- limites por jogador / IP / duplicatas (todas leituras baratas, via índice) ---
   const perHour = int(env.LETTERS_PER_HOUR, 12);
   const perDay = int(env.LETTERS_PER_DAY, 40);
   const perHourIp = int(env.LETTERS_PER_HOUR_IP, 30);
+
+  // Autor com desenho denunciado recentemente perde o direito de desenhar por um tempo (a carta ainda vai, sem o desenho).
+  if (drawing) {
+    const banDays = int(env.DRAWING_BAN_DAYS, 14);
+    const banReports = int(env.DRAWING_BAN_REPORTS, 2);
+    const flagged = await env.DB.prepare(
+      'SELECT COUNT(*) AS n FROM letters WHERE author_id = ? AND created_at > ? AND had_drawing = 1 AND reports >= ?'
+    ).bind(auth.authorId, t - banDays * DAY, banReports).first('n');
+    if (flagged > 0) { drawing = null; drawingDropped = 'drawing_blocked'; }
+  }
 
   const [hourRow, dayRow, ipRow, dupRow] = await env.DB.batch([
     env.DB.prepare('SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM letters WHERE author_id = ? AND created_at > ?').bind(auth.authorId, t - HOUR),
@@ -181,14 +195,15 @@ async function createLetter(request, env, auth) {
   }
 
   const res = await env.DB.prepare(
-    `INSERT INTO letters (author_id, ip_hash, name, body, body_hash, lang, rand, created_at, style)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).bind(auth.authorId, auth.ipHash, name, text, bodyHash, lang, Math.random(), t, style).run();
+    `INSERT INTO letters (author_id, ip_hash, name, body, body_hash, lang, rand, created_at, style, drawing, had_drawing)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(auth.authorId, auth.ipHash, name, text, bodyHash, lang, Math.random(), t, style, drawing, drawing ? 1 : 0).run();
 
   const id = res.meta.last_row_id;
   return json({
     id,
     created_at: t,
+    drawing_dropped: drawingDropped,
     remaining_hour: Math.max(0, perHour - hourRow.n - 1),
     remaining_day: Math.max(0, perDay - dayRow.n - 1),
   }, 201);
@@ -213,7 +228,7 @@ async function feed(request, env, auth, ctx) {
   const sampleSize = Math.max(40, count * 8);
   const pivot = Math.random();
   const sql = (op, order) =>
-    `SELECT id, name, body, score, delivered, created_at, lang, style FROM letters
+    `SELECT id, name, body, score, delivered, created_at, lang, style, drawing FROM letters
      WHERE hidden = 0 AND lang = ? AND rand ${op} ? AND author_id != ? AND score >= ? AND created_at > ?
      ORDER BY rand ${order} LIMIT ?`;
 
@@ -234,7 +249,7 @@ async function feed(request, env, auth, ctx) {
   // Último recurso: qualquer idioma (jogador de idioma raro não fica sem cartas).
   if (rows.length < count) {
     const c = await env.DB.prepare(
-      `SELECT id, name, body, score, delivered, created_at, lang, style FROM letters
+      `SELECT id, name, body, score, delivered, created_at, lang, style, drawing FROM letters
        WHERE hidden = 0 AND author_id != ? AND score >= ? AND created_at > ? ORDER BY rand LIMIT ?`
     ).bind(auth.authorId, minScore, minCreated, sampleSize).all();
     take(c.results);
@@ -250,6 +265,7 @@ async function feed(request, env, auth, ctx) {
       lang: r.lang,
       created_at: r.created_at,
       style: parseStyle(r.style),
+      drawing: r.drawing || null,
       vote_token: await voteToken(env, r.id, auth.authorId),
     });
   }
@@ -321,6 +337,7 @@ async function vote(request, env, auth, letterId, isReport) {
   const reason = isReport ? String(body.reason || '').slice(0, 100) : null;
   const hideScore = int(env.HIDE_SCORE, -5);
   const hideReports = int(env.HIDE_REPORTS, 3);
+  const hideReportsDrawing = int(env.HIDE_REPORTS_DRAWING, 2);
 
   // Tudo numa transação (D1 batch é atômico): upsert do voto, recálculo dos contadores,
   // e remoção automática se passou do limite. Uma pessoa = um voto por carta, sempre.
@@ -343,10 +360,10 @@ async function vote(request, env, auth, letterId, isReport) {
        WHERE id = ?`
     ).bind(letterId, letterId, letterId, letterId, letterId),
     env.DB.prepare(
-      `UPDATE letters SET hidden = 1, hidden_at = ?, body = '',
-         hidden_reason = CASE WHEN reports >= ? THEN 'reports' ELSE 'downvotes' END
-       WHERE id = ? AND hidden = 0 AND (score <= ? OR reports >= ?)`
-    ).bind(t, hideReports, letterId, hideScore, hideReports),
+      `UPDATE letters SET hidden = 1, hidden_at = ?, body = '', drawing = NULL,
+         hidden_reason = CASE WHEN reports >= (CASE WHEN had_drawing = 1 THEN ? ELSE ? END) THEN 'reports' ELSE 'downvotes' END
+       WHERE id = ? AND hidden = 0 AND (score <= ? OR reports >= (CASE WHEN had_drawing = 1 THEN ? ELSE ? END))`
+    ).bind(t, hideReportsDrawing, hideReports, letterId, hideScore, hideReportsDrawing, hideReports),
     env.DB.prepare('SELECT score, upvotes, downvotes, reports, hidden FROM letters WHERE id = ?').bind(letterId),
   ]);
 
@@ -360,7 +377,7 @@ async function vote(request, env, auth, letterId, isReport) {
 
 async function mine(env, auth) {
   const rs = await env.DB.prepare(
-    `SELECT id, name, body, lang, score, upvotes, downvotes, delivered, hidden, hidden_reason, created_at, style
+    `SELECT id, name, body, lang, score, upvotes, downvotes, delivered, hidden, hidden_reason, created_at, style, drawing
      FROM letters WHERE author_id = ? ORDER BY created_at DESC LIMIT 50`
   ).bind(auth.authorId).all();
   return json({ letters: rs.results.map((r) => ({ ...r, style: parseStyle(r.style) })) });
@@ -369,7 +386,7 @@ async function mine(env, auth) {
 async function deleteOwnLetter(env, auth, letterId) {
   const t = now();
   const res = await env.DB.prepare(
-    `UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'author', body = '' WHERE id = ? AND author_id = ? AND hidden = 0`
+    `UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'author', body = '', drawing = NULL WHERE id = ? AND author_id = ? AND hidden = 0`
   ).bind(t, letterId, auth.authorId).run();
   if (!res.meta.changes) throw new HttpError(404, 'not_found', 'Carta não encontrada (ou já removida).');
   return json({ ok: true });
@@ -398,14 +415,15 @@ async function adminRoute(request, env, path, method) {
     const hidden = url.searchParams.get('hidden') === '1' ? 1 : 0;
     const limit = clamp(int(url.searchParams.get('limit'), 50), 1, 200);
     const before = int(url.searchParams.get('before'), 2147483647);
+    const onlyDrawings = url.searchParams.get('drawing') === '1'; // moderação manual: desenhos primeiro
     const rs = await env.DB.prepare(
-      `SELECT id, author_id, name, body, lang, score, upvotes, downvotes, reports, delivered, hidden, hidden_reason, created_at
-       FROM letters WHERE hidden = ? AND id < ? ORDER BY id DESC LIMIT ?`
+      `SELECT id, author_id, name, body, lang, score, upvotes, downvotes, reports, delivered, hidden, hidden_reason, created_at, style, drawing
+       FROM letters WHERE hidden = ? AND id < ? ${onlyDrawings ? 'AND drawing IS NOT NULL' : ''} ORDER BY (drawing IS NOT NULL) DESC, id DESC LIMIT ?`
     ).bind(hidden, before, limit).all();
-    return json({ letters: rs.results });
+    return json({ letters: rs.results.map((r) => ({ ...r, style: parseStyle(r.style) })) });
   }
   if ((m = path.match(/^\/admin\/letters\/(\d+)$/)) && method === 'DELETE') {
-    await env.DB.prepare(`UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'admin', body = '' WHERE id = ?`).bind(now(), Number(m[1])).run();
+    await env.DB.prepare(`UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'admin', body = '', drawing = NULL WHERE id = ?`).bind(now(), Number(m[1])).run();
     return json({ ok: true });
   }
   if (method === 'POST' && path === '/admin/bans') {
@@ -413,7 +431,7 @@ async function adminRoute(request, env, path, method) {
     if (!body.author_id) throw new HttpError(400, 'bad_request', 'author_id obrigatório.');
     await env.DB.batch([
       env.DB.prepare('INSERT OR REPLACE INTO bans (author_id, reason, created_at) VALUES (?, ?, ?)').bind(body.author_id, String(body.reason || ''), now()),
-      env.DB.prepare(`UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'ban', body = '' WHERE author_id = ? AND hidden = 0`).bind(now(), body.author_id),
+      env.DB.prepare(`UPDATE letters SET hidden = 1, hidden_at = ?, hidden_reason = 'ban', body = '', drawing = NULL WHERE author_id = ? AND hidden = 0`).bind(now(), body.author_id),
     ]);
     return json({ ok: true });
   }
@@ -482,6 +500,16 @@ function normalizeStyle(style) {
   if (keys.length === 0) return null;
   return JSON.stringify(out);
 }
+/** Desenho: valida tamanho e decodifica para garantir que é um canvas 160x90 bem formado. */
+function normalizeDrawing(d, maxChars) {
+  if (d == null || d === '') return null;
+  if (typeof d !== 'string') throw new HttpError(400, 'bad_drawing', 'drawing deve ser uma string.');
+  if (d.length > maxChars) throw new HttpError(413, 'drawing_too_large', `O desenho é grande demais (máximo ${maxChars} caracteres codificados).`);
+  const cells = decodeDrawing(d);
+  if (!cells) throw new HttpError(400, 'bad_drawing', 'Desenho em formato inválido.');
+  return isDrawingEmpty(cells) ? null : d;
+}
+
 function parseStyle(s) {
   if (!s) return null;
   try { return JSON.parse(s); } catch { return null; }

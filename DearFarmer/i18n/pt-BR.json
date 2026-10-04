@@ -126,5 +126,17 @@
   "design.sticker.strawberry": "Morango",
   "design.sticker.junimo": "Junimo",
   "design.sticker.chicken": "Galinha",
-  "design.sticker.mushroom": "Cogumelo"
+  "design.sticker.mushroom": "Cogumelo",
+  "design.tab.style": "Design",
+  "design.tab.paint": "Desenhar",
+  "paint.hint": "Arraste sobre a carta para pintar. Teclas: P lápis, L linha, B balde, E borracha, 1-3 tamanho, Ctrl+Z desfazer. O desenho vai junto com suas cartas; desenhos denunciados por quem recebe são removidos e te deixam sem desenhar por um tempo.",
+  "paint.tool.pencil": "Lápis",
+  "paint.tool.line": "Linha",
+  "paint.tool.fill": "Balde",
+  "paint.size": "Tam. {{size}}",
+  "paint.undo": "Desfazer",
+  "paint.clear": "Limpar",
+  "error.drawingBlocked": "Sua carta foi enviada sem o desenho: um desenho seu foi denunciado recentemente, então desenhar está pausado por um tempo.",
+  "config.showDrawings.name": "Mostrar desenhos de outros jogadores",
+  "config.showDrawings.tooltip": "Desligue para receber as cartas só com texto e adesivos (útil para crianças ou se preferir não ver desenhos livres)."
 }

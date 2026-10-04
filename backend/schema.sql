@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS letters (
   hidden_at     INTEGER,
   rand          REAL    NOT NULL,            -- numero aleatorio fixo p/ amostragem barata via indice
   style         TEXT,                        -- JSON com o design escolhido pelo autor (papel, tinta, layout...)
+  drawing       TEXT,                        -- desenho pixel art codificado (ver src/drawing.js); NULL quando removida
+  had_drawing   INTEGER NOT NULL DEFAULT 0,  -- 1 se foi enviada com desenho (usado p/ moderação mesmo após remoção)
   created_at    INTEGER NOT NULL             -- unix seconds
 );
 

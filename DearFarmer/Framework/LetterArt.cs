@@ -56,7 +56,7 @@ namespace DearFarmer.Framework
         }
 
         /// <summary>Desenha papel, borda, faixa, cabeçalho, carimbo e adesivo. O texto fica por conta do chamador.</summary>
-        public static void DrawPaper(SpriteBatch b, ModServices s, ResolvedStyle st, Frame f, string headerText, string footerTag = "Dear Farmer")
+        public static void DrawPaper(SpriteBatch b, ModServices s, ResolvedStyle st, Frame f, string headerText, string footerTag = "Dear Farmer", Texture2D drawing = null)
         {
             Rectangle content = f.Content;
 
@@ -74,6 +74,10 @@ namespace DearFarmer.Framework
                 b.Draw(Game1.staminaRect, new Rectangle(content.X, content.Y, content.Width, bandH), st.Ink * (st.DarkPaper ? 0.25f : 0.14f));
                 b.Draw(Game1.staminaRect, new Rectangle(content.X, content.Y + bandH, content.Width, Math.Max(2, (int)(f.Scale * 0.5f))), st.Ink * 0.6f);
             }
+
+            // desenho do jogador (pixel art 160x90, 2x2 pixels do papel por célula), abaixo de carimbo/adesivo/texto
+            if (drawing != null && !drawing.IsDisposed)
+                b.Draw(drawing, new Vector2(f.X, f.Y), null, Color.White, 0f, Vector2.Zero, f.Scale * 2f, SpriteEffects.None, 0.87f);
 
             // carimbo
             float stampScale = Math.Max(1.5f, f.Scale * 0.75f);
@@ -187,7 +191,7 @@ namespace DearFarmer.Framework
         }
 
         /// <summary>Desenha linhas de texto no corpo respeitando o alinhamento do layout.</summary>
-        public static void DrawBodyLines(SpriteBatch b, SpriteFont font, IList<string> lines, int start, int count, Rectangle area, int y, ResolvedStyle st, Color color, float fontScale = 1f)
+        public static void DrawBodyLines(SpriteBatch b, SpriteFont font, IList<string> lines, int start, int count, Rectangle area, int y, ResolvedStyle st, Color color, float fontScale = 1f, Color? halo = null)
         {
             bool centered = st.Layout == LetterLayout.Centered;
             int lineH = (int)(font.LineSpacing * fontScale);
@@ -195,9 +199,21 @@ namespace DearFarmer.Framework
             {
                 string line = lines[i];
                 float x = centered ? area.X + (area.Width - font.MeasureString(line).X * fontScale) / 2 : area.X;
-                b.DrawString(font, line, new Vector2(x, y), color, 0f, Vector2.Zero, fontScale, SpriteEffects.None, 0.89f);
+                DrawTextWithHalo(b, font, line, new Vector2(x, y), color, fontScale, halo);
                 y += lineH;
             }
+        }
+
+        /// <summary>Texto com um contorno na cor do papel: mantém a carta legível por cima de um desenho.</summary>
+        public static void DrawTextWithHalo(SpriteBatch b, SpriteFont font, string text, Vector2 pos, Color color, float scale, Color? halo)
+        {
+            if (halo.HasValue)
+            {
+                float o = Math.Max(1f, 2f * scale);
+                foreach (Vector2 d in new[] { new Vector2(-o, 0), new Vector2(o, 0), new Vector2(0, -o), new Vector2(0, o), new Vector2(-o, -o), new Vector2(o, o), new Vector2(-o, o), new Vector2(o, -o) })
+                    b.DrawString(font, text, pos + d, halo.Value, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.889f);
+            }
+            b.DrawString(font, text, pos, color, 0f, Vector2.Zero, scale, SpriteEffects.None, 0.89f);
         }
     }
 }
